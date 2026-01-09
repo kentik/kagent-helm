@@ -1,0 +1,98 @@
+{{- if eq .Values.deploymentType "statefulset" }}
+{{- include "kagent.validate" . }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "kagent.fullname" . }}
+  labels:
+    {{- include "kagent.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "kagent.fullname" . }}-headless
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "kagent.selectorLabels" . | nindent 6 }}
+  updateStrategy:
+    type: RollingUpdate
+  podManagementPolicy: OrderedReady
+  template:
+    metadata:
+      labels:
+        {{- include "kagent.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- include "kagent.podSpec" . | nindent 6 }}
+      {{- if and .Values.persistence.keypair.enabled (eq .Values.persistence.keypair.type "secret") }}
+      initContainers:
+      - name: setup-keypair
+        image: busybox:1.36
+        command:
+        - sh
+        - -c
+        - |
+          # Extract pod ordinal from hostname (e.g., kagent-0 -> 0)
+          POD_INDEX=$(echo $HOSTNAME | grep -o '[0-9]*$')
+          echo "Pod index: $POD_INDEX"
+          # Copy the correct keypair from projected volume to shared emptyDir
+          if [ -d "/secrets/pod-${POD_INDEX}" ]; then
+            cp -v /secrets/pod-${POD_INDEX}/* /opt/ua/keys/ || true
+            chmod 400 /opt/ua/keys/* || true
+            echo "Keypair for pod-${POD_INDEX} copied successfully"
+          else
+            echo "Warning: No keypair found for pod-${POD_INDEX}"
+          fi
+        volumeMounts:
+        - name: keypair-secrets-projected
+          mountPath: /secrets
+          readOnly: true
+        - name: keypair-secret
+          mountPath: /opt/ua/keys
+      volumes:
+      - name: keypair-secrets-projected
+        projected:
+          defaultMode: 0400
+          sources:
+          {{- range $index := until (int .Values.replicaCount) }}
+          - secret:
+              name: {{ include "kagent.fullname" $ }}-{{ $index }}-secret
+              items:
+              - key: private_key.pem
+                path: pod-{{ $index }}/private_key.pem
+              - key: public_key.pem
+                path: pod-{{ $index }}/public_key.pem
+              optional: true
+          {{- end }}
+      - name: keypair-secret
+        emptyDir: {}
+      {{- end }}
+  {{- if .Values.persistence.enabled }}
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+      labels:
+        {{- include "kagent.selectorLabels" . | nindent 8 }}
+    spec:
+      accessModes:
+        {{- toYaml .Values.persistence.pvc.accessModes | nindent 8 }}
+      {{- if .Values.persistence.pvc.storageClass }}
+      storageClassName: {{ .Values.persistence.pvc.storageClass | quote }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.persistence.pvc.size | quote }}
+  {{- if and .Values.persistence.keypair.enabled (eq .Values.persistence.keypair.type "pvc") }}
+  - metadata:
+      name: keys
+      labels:
+        {{- include "kagent.selectorLabels" . | nindent 8 }}
+    spec:
+      accessModes:
+        {{- toYaml .Values.persistence.keypair.pvc.accessModes | nindent 8 }}
+      {{- if .Values.persistence.keypair.pvc.storageClass }}
+      storageClassName: {{ .Values.persistence.keypair.pvc.storageClass | quote }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.persistence.keypair.pvc.size | default "100Mi" | quote }}
+  {{- end }}
+  {{- end }}
+{{- end }}

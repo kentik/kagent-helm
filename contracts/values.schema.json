@@ -1,0 +1,405 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Kagent Helm Chart Values",
+  "description": "Configuration values for deploying Kentik Universal Agent (kagent) via Helm",
+  "type": "object",
+  "required": ["kagent"],
+  "properties": {
+    "deploymentType": {
+      "type": "string",
+      "enum": ["statefulset", "daemonset"],
+      "default": "statefulset",
+      "description": "Kubernetes workload type for agent deployment"
+    },
+    "replicaCount": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1,
+      "description": "Number of replicas (ignored for DaemonSet)"
+    },
+    "image": {
+      "type": "object",
+      "properties": {
+        "repository": {
+          "type": "string",
+          "default": "kentik/kagent",
+          "description": "Container image repository"
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": ["Always", "IfNotPresent", "Never"],
+          "default": "IfNotPresent",
+          "description": "Image pull policy"
+        },
+        "tag": {
+          "type": "string",
+          "default": "v5.0.1",
+          "description": "Image tag (overrides Chart.AppVersion)"
+        }
+      }
+    },
+    "kagent": {
+      "type": "object",
+      "required": ["companyId"],
+      "properties": {
+        "provisioningToken": {
+          "type": "string",
+          "description": "Pre-authorized token from Kentik CreateAgent API (optional)"
+        },
+        "companyId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Kentik company identifier for agent scoping (REQUIRED)"
+        },
+        "agentId": {
+          "type": "string",
+          "description": "Agent ID from CreateAgent API for Terraform tracking (optional)"
+        },
+        "releaseChannel": {
+          "type": "string",
+          "enum": ["stable", "beta", "dev"],
+          "default": "stable",
+          "description": "Update channel for agent binary downloads"
+        },
+        "logDest": {
+          "type": "string",
+          "default": "stdout",
+          "description": "Logging destination (stdout, stderr, discard, or file path)"
+        },
+        "supervisor": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "description": "Enable agent process supervisor (K_SUPERVISOR_ENABLED)"
+            },
+            "detached": {
+              "type": "boolean",
+              "default": true,
+              "description": "Run capabilities in separate processes (K_SUPERVISOR_DETACHED)"
+            },
+            "dropPrivilegesEnabled": {
+              "type": "boolean",
+              "default": false,
+              "description": "Enable privilege management system (K_SUPERVISOR_DROP_PRIVILEGES_ENABLED)"
+            },
+            "cleanOrphansEnabled": {
+              "type": "boolean",
+              "default": false,
+              "description": "Terminate orphaned capability subprocesses (K_SUPERVISOR_CLEAN_ORPHANS_ENABLED)"
+            }
+          }
+        },
+        "healthCheck": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false,
+              "description": "Enable health check HTTP server (K_HC_SERVER_ENABLED)"
+            },
+            "network": {
+              "type": "string",
+              "enum": ["tcp", "tcp4", "tcp6"],
+              "default": "tcp4",
+              "description": "Network protocol for health server (K_HC_SERVER_NETWORK)"
+            },
+            "address": {
+              "type": "string",
+              "default": ":8099",
+              "description": "Listen address for health server (K_HC_SERVER_ADDRESS)"
+            }
+          }
+        },
+        "diskReservation": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "description": "Enable disk space reservation (K_DISK_SPACE_RESERVATION_ENABLED)"
+            },
+            "initialSize": {
+              "type": "string",
+              "pattern": "^\\d+(MB|GB|TB)$",
+              "default": "200MB",
+              "description": "Amount of disk space to reserve (K_DISK_SPACE_RESERVATION_INITIAL_SIZE)"
+            }
+          }
+        },
+        "config": {
+          "type": "object",
+          "properties": {
+            "apiEndpoint": {
+              "type": "string",
+              "default": "grpc.api.kentik.com:443",
+              "description": "Kentik API gRPC endpoint (maps to K_API_ROOT)"
+            },
+            "logLevel": {
+              "type": "string",
+              "enum": ["debug", "info", "warn", "error"],
+              "default": "info",
+              "description": "Logging verbosity level (K_LOG_LEVEL)"
+            },
+            "logFormat": {
+              "type": "string",
+              "enum": ["json", "text"],
+              "default": "json",
+              "description": "Log format (deprecated: agent infers from internal settings)",
+              "deprecated": true
+            },
+            "buffer": {
+              "type": "object",
+              "deprecated": true,
+              "description": "Deprecated: These fields are not used by the agent",
+              "properties": {
+                "maxSize": {
+                  "type": "string",
+                  "default": "1Gi"
+                },
+                "retentionHours": {
+                  "type": "integer",
+                  "default": 24
+                }
+              }
+            },
+            "retry": {
+              "type": "object",
+              "deprecated": true,
+              "description": "Deprecated: These fields are not used by the agent",
+              "properties": {
+                "initialDelaySeconds": {
+                  "type": "integer",
+                  "default": 5
+                },
+                "maxDelaySeconds": {
+                  "type": "integer",
+                  "default": 300
+                },
+                "multiplier": {
+                  "type": "number",
+                  "default": 2.0
+                }
+              }
+            }
+          }
+        },
+        "byok": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false,
+              "description": "Enable Bring Your Own Key mode"
+            },
+            "existingSecret": {
+              "type": "string",
+              "description": "Name of Secret containing pre-generated keypair (required if enabled)"
+            }
+          }
+        }
+      }
+    },
+    "serviceAccount": {
+      "type": "object",
+      "properties": {
+        "create": {
+          "type": "boolean",
+          "default": true,
+          "description": "Create ServiceAccount for agent pods"
+        },
+        "annotations": {
+          "type": "object",
+          "additionalProperties": {"type": "string"},
+          "description": "Annotations for ServiceAccount"
+        },
+        "name": {
+          "type": "string",
+          "description": "ServiceAccount name (generated if empty)"
+        }
+      }
+    },
+    "rbac": {
+      "type": "object",
+      "properties": {
+        "create": {
+          "type": "boolean",
+          "default": false,
+          "description": "Create RBAC resources (Role, RoleBinding)"
+        }
+      }
+    },
+    "networkPolicy": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable NetworkPolicy for pod egress"
+        },
+        "egress": {
+          "type": "array",
+          "description": "Egress rules for NetworkPolicy"
+        }
+      }
+    },
+    "podSecurityContext": {
+      "type": "object",
+      "properties": {
+        "runAsNonRoot": {"type": "boolean", "default": true},
+        "runAsUser": {"type": "integer", "default": 1000},
+        "fsGroup": {"type": "integer", "default": 1000}
+      }
+    },
+    "securityContext": {
+      "type": "object",
+      "properties": {
+        "allowPrivilegeEscalation": {"type": "boolean", "default": false},
+        "capabilities": {
+          "type": "object",
+          "properties": {
+            "drop": {
+              "type": "array",
+              "items": {"type": "string"},
+              "default": ["ALL"]
+            }
+          }
+        },
+        "readOnlyRootFilesystem": {"type": "boolean", "default": false}
+      }
+    },
+    "resources": {
+      "type": "object",
+      "properties": {
+        "requests": {
+          "type": "object",
+          "properties": {
+            "cpu": {"type": "string", "default": "100m"},
+            "memory": {"type": "string", "default": "128Mi"}
+          }
+        },
+        "limits": {
+          "type": "object",
+          "properties": {
+            "cpu": {"type": "string", "default": "500m"},
+            "memory": {"type": "string", "default": "512Mi"}
+          }
+        }
+      }
+    },
+    "livenessProbe": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable liveness probe (opt-in)"
+        },
+        "initialDelaySeconds": {"type": "integer", "default": 30},
+        "periodSeconds": {"type": "integer", "default": 10},
+        "timeoutSeconds": {"type": "integer", "default": 5},
+        "failureThreshold": {"type": "integer", "default": 3}
+      }
+    },
+    "readinessProbe": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable readiness probe (auto-enabled if healthCheck.enabled=true)"
+        },
+        "initialDelaySeconds": {"type": "integer", "default": 5},
+        "periodSeconds": {"type": "integer", "default": 10},
+        "timeoutSeconds": {"type": "integer", "default": 5},
+        "failureThreshold": {"type": "integer", "default": 3}
+      }
+    },
+    "nodeSelector": {
+      "type": "object",
+      "additionalProperties": {"type": "string"},
+      "description": "Node selector for pod scheduling"
+    },
+    "tolerations": {
+      "type": "array",
+      "description": "Tolerations for pod scheduling"
+    },
+    "affinity": {
+      "type": "object",
+      "description": "Affinity rules for pod scheduling"
+    },
+    "persistence": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable persistent volumes (for StatefulSet)"
+        },
+        "storageClass": {
+          "type": "string",
+          "description": "Storage class name (empty = cluster default)"
+        },
+        "size": {
+          "type": "string",
+          "default": "10Gi",
+          "description": "Volume size for application data"
+        },
+        "accessModes": {
+          "type": "array",
+          "items": {"type": "string"},
+          "default": ["ReadWriteOnce"]
+        },
+        "keypair": {
+          "type": "object",
+          "properties": {
+            "enabled": {"type": "boolean", "default": true},
+            "storageClass": {"type": "string"},
+            "size": {"type": "string", "default": "100Mi"},
+            "accessModes": {
+              "type": "array",
+              "items": {"type": "string"},
+              "default": ["ReadWriteOnce"]
+            }
+          }
+        }
+      }
+    },
+    "configmap": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable additional ConfigMap for advanced env var overrides"
+        },
+        "data": {
+          "type": "object",
+          "additionalProperties": {"type": "string"},
+          "description": "Additional environment variables (for advanced users)"
+        }
+      }
+    },
+    "service": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable Service resource"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["ClusterIP", "NodePort", "LoadBalancer"],
+          "default": "ClusterIP"
+        },
+        "port": {
+          "type": "integer",
+          "default": 8080
+        }
+      }
+    }
+  }
+}
+

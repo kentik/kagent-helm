@@ -1,0 +1,52 @@
+{{- if ne .Values.deploymentType "statefulset" }}
+{{- if and .Values.persistence.enabled (eq .Values.persistence.type "pvc") }}
+{{- include "kagent.validate" . }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "kagent.fullname" . }}-data
+  labels:
+    {{- include "kagent.labels" . | nindent 4 }}
+    app.kubernetes.io/component: data
+spec:
+  accessModes:
+    {{- toYaml .Values.persistence.pvc.accessModes | nindent 4 }}
+  {{- if .Values.persistence.pvc.storageClass }}
+  {{- if (eq "-" .Values.persistence.pvc.storageClass) }}
+  storageClassName: ""
+  {{- else }}
+  storageClassName: {{ .Values.persistence.pvc.storageClass | quote }}
+  {{- end }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.pvc.size }}
+{{- end }}
+{{- end }}
+{{- if ne .Values.deploymentType "statefulset" }}
+{{- if and .Values.persistence.keypair.enabled (eq .Values.persistence.keypair.type "pvc") }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "kagent.fullname" . }}-keys
+  labels:
+    {{- include "kagent.labels" . | nindent 4 }}
+    app.kubernetes.io/component: keys
+spec:
+  accessModes:
+    {{- toYaml .Values.persistence.keypair.pvc.accessModes | nindent 4 }}
+  {{- if .Values.persistence.keypair.pvc.storageClass }}
+  {{- if (eq "-" .Values.persistence.keypair.pvc.storageClass) }}
+  storageClassName: ""
+  {{- else }}
+  storageClassName: {{ .Values.persistence.keypair.pvc.storageClass | quote }}
+  {{- end }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.keypair.pvc.size }}
+{{- end }}
+{{- end }}
+

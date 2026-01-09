@@ -1,0 +1,24 @@
+{{- if eq .Values.deploymentType "daemonset" }}
+{{- include "kagent.validate" . }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "kagent.fullname" . }}
+  labels:
+    {{- include "kagent.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "kagent.selectorLabels" . | nindent 6 }}
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        {{- include "kagent.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- include "kagent.podSpec" . | nindent 6 }}
+{{- end }}
+

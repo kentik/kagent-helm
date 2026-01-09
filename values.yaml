@@ -1,0 +1,237 @@
+# Default values for kagent Helm chart
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# ============================================================================
+# Deployment Pattern Selection
+# ============================================================================
+# Choose the Kubernetes workload type that best fits your use case:
+#
+# statefulset (RECOMMENDED):
+#   - Default and most common pattern for kagent deployments
+#   - Provides stable network identities and persistent storage
+#   - Ideal for agents that need to maintain state and identity
+#   - Supports multiple replicas with individual storage volumes
+#   - Best for production environments requiring data persistence
+#
+# daemonset:
+#   - Deploys one agent pod per node in the cluster
+#   - Ideal for node-level monitoring scenarios
+#   - Use cases: monitoring all DNS servers, per-node metrics collection
+#   - Automatically scales with cluster node count
+#   - Typically uses hostPath volumes for local node storage
+#
+deploymentType: statefulset
+
+# Number of replicas (StatefulSet patterns only)
+# DaemonSet pattern ignores this value
+replicaCount: 1
+
+# Kagent container image configuration
+image:
+  repository: kentik/kagent
+  pullPolicy: IfNotPresent
+  tag: v5.0.1
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# Kagent configuration
+kagent:
+  # Provisioning token from CreateAgent API (pass via --set-string)
+  provisioningToken: ""
+
+  # Company ID for agent registration and scoping (REQUIRED in many environments)
+  # Maps to env K_COMPANY_ID
+  companyId: 1013
+
+  # Agent ID from CreateAgent API (optional, for Terraform tracking)
+  agentId: ""
+
+  # Release channel for agent binary updates (stable, beta, dev)
+  # Maps to env K_RELEASE_CHANNEL
+  releaseChannel: stable
+
+  # Parent supervisor controls
+  supervisor:
+    enabled: true                 # K_SUPERVISOR_ENABLED
+    detached: true                # K_SUPERVISOR_DETACHED
+    dropPrivilegesEnabled: false  # K_SUPERVISOR_DROP_PRIVILEGES_ENABLED
+    cleanOrphansEnabled: false    # K_SUPERVISOR_CLEAN_ORPHANS_ENABLED
+
+  # Disk space reservation to prevent OOS conditions
+  diskReservation:
+    enabled: true                 # K_DISK_SPACE_RESERVATION_ENABLED
+    initialSize: "200MB"         # K_DISK_SPACE_RESERVATION_INITIAL_SIZE
+
+  # Logging destination (stdout|stderr|discard|filename)
+  # Maps to env K_LOG_DEST
+  # Default: stdout (Kubernetes best practice - enables kubectl logs and cluster log collection)
+  logDest: stdout
+
+  # Log level: debug, info, warn, error
+  logLevel: info
+
+  # Kentik API endpoint
+  apiEndpoint: "grpc.api.kentik.com:443"
+
+# Service account configuration
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# RBAC configuration (if kagent needs Kubernetes API access)
+rbac:
+  create: false
+
+# Network policy configuration (opt-in, disabled by default for compatibility)
+networkPolicy:
+  enabled: false
+  egress:
+    # DNS
+    - to:
+      - namespaceSelector: {}
+      ports:
+      - protocol: UDP
+        port: 53
+    # Kentik API
+    - to:
+      - ipBlock:
+          cidr: 0.0.0.0/0
+      ports:
+      - protocol: TCP
+        port: 443
+    # SNMP (adjust CIDR for your network)
+    # - to:
+    #   - ipBlock:
+    #       cidr: 10.0.0.0/8
+    #   ports:
+    #   - protocol: UDP
+    #     port: 161
+
+# Pod security context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 500
+  fsGroup: 500
+
+# Container security context
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+    add:
+    - NET_RAW
+  readOnlyRootFilesystem: false  # kagent needs to write to /opt/kentik
+
+# Resource limits and requests
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# Liveness probe configuration
+# When enabled, automatically configures kagent health check server
+livenessProbe:
+  enabled: true
+  httpGet:
+    path: /hc
+    port: 8099
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+# Readiness probe configuration
+# When enabled, automatically configures kagent health check server
+readinessProbe:
+  enabled: false
+  httpGet:
+    path: /hc
+    port: 8099
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity rules
+affinity: {}
+
+# Persistence configuration
+persistence:
+  # Enable persistent storage (StatefulSet: PVC, DaemonSet: hostPath or emptyDir)
+  enabled: true
+
+  # Volume type: pvc, hostPath, emptyDir
+  # - pvc: PersistentVolumeClaim (StatefulSet default)
+  # - hostPath: Host directory mount (DaemonSet local storage)
+  # - emptyDir: Temporary pod storage (Deployment/DaemonSet default)
+  type: pvc
+
+  # PVC configuration (when type: pvc)
+  pvc:
+    # Storage class name (empty string uses cluster default)
+    storageClass: ""
+    # Volume size for application data
+    size: 10Gi
+    # Access modes
+    accessModes:
+      - ReadWriteOnce
+
+  # HostPath configuration (when type: hostPath, typically for DaemonSet)
+  hostPath:
+    # Path on the host machine for kagent data
+    path: /var/lib/kagent/data
+    # Type of hostPath volume (DirectoryOrCreate, Directory, etc.)
+    type: DirectoryOrCreate
+
+  # Separate volume for keypair (recommended for security)
+  keypair:
+    enabled: true
+
+    # Keypair storage type: secret, pvc, hostPath, emptyDir
+    # - secret: Kubernetes Secret (recommended, use generate-secrets.sh)
+    # - pvc: Separate PVC for keys (StatefulSet)
+    # - hostPath: Host directory for keys (DaemonSet)
+    # - emptyDir: Temporary storage (not recommended for production)
+    type: secret
+
+    # PVC configuration (when type: pvc)
+    pvc:
+      storageClass: ""
+      size: 100Mi
+      accessModes:
+        - ReadWriteOnce
+
+    # HostPath configuration (when type: hostPath)
+    hostPath:
+      # Path on the host machine for keypair
+      path: /var/lib/kagent/keys
+      # Type of hostPath volume
+      type: DirectoryOrCreate
+
+    # Secret configuration (when type: secret)
+    # Provide base64-encoded keys via secrets, use generate-secrets.sh script
+    secret:
+      # Secret name pattern will be: {{ fullname }}-{replica-index}-secret
+      # Keys must be named: private_key.pem, public_key.pem
+      name: ""
+
+# ConfigMap configuration (optional, environment variables take precedence)
+configmap:
+  enabled: false
+  data: {}
+    # Example additional config
+    # K_CUSTOM_SETTING: "value"

@@ -1,0 +1,31 @@
+# Patterns to ignore when packaging this Helm chart
+.git/
+.gitignore
+.DS_Store
+*.swp
+*.bak
+*.tmp
+*.orig
+*~
+
+# Development files
+.vscode/
+.idea/
+*.iml
+
+# Documentation (except Chart-level README)
+specs/
+CONTRIBUTING.md
+LICENSE
+
+# CI/CD files
+.github/
+
+# Test files
+tests/
+test/
+*.test.yaml
+
+# Examples directory (included separately)
+# examples/
+

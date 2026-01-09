@@ -1,0 +1,47 @@
+{{- include "kagent.validate" . }}
+{{- if eq .Values.deploymentType "statefulset" }}
+Kentik Universal Agent (kagent) has been deployed as a StatefulSet.
+
+Release name: {{ .Release.Name }}
+Namespace: {{ .Release.Namespace }}
+Deployment type: {{ .Values.deploymentType }}
+
+To get the status of your statefulset:
+  kubectl --namespace {{ .Release.Namespace }} get statefulset {{ include "kagent.fullname" . }}
+
+To view the pods (with stable identities):
+  kubectl --namespace {{ .Release.Namespace }} get pods -l "app.kubernetes.io/name={{ include "kagent.name" . }},app.kubernetes.io/instance={{ .Release.Name }}"
+
+To view persistent volume claims:
+  kubectl --namespace {{ .Release.Namespace }} get pvc -l "app.kubernetes.io/name={{ include "kagent.name" . }},app.kubernetes.io/instance={{ .Release.Name }}"
+
+To view the logs for a specific pod:
+  kubectl --namespace {{ .Release.Namespace }} logs {{ include "kagent.fullname" . }}-0
+
+IMPORTANT: StatefulSet persistent volumes will NOT be deleted when you uninstall this chart.
+To clean up PVCs after uninstall:
+  kubectl --namespace {{ .Release.Namespace }} delete pvc -l "app.kubernetes.io/name={{ include "kagent.name" . }},app.kubernetes.io/instance={{ .Release.Name }}"
+
+{{- else if eq .Values.deploymentType "daemonset" }}
+Kentik Universal Agent (kagent) has been deployed as a DaemonSet.
+
+Release name: {{ .Release.Name }}
+Namespace: {{ .Release.Namespace }}
+Deployment type: {{ .Values.deploymentType }}
+
+To get the status of your daemonset:
+  kubectl --namespace {{ .Release.Namespace }} get daemonset {{ include "kagent.fullname" . }}
+
+To view the pods (one per node):
+  kubectl --namespace {{ .Release.Namespace }} get pods -l "app.kubernetes.io/name={{ include "kagent.name" . }},app.kubernetes.io/instance={{ .Release.Name }}" -o wide
+
+To view the logs from a specific node:
+  kubectl --namespace {{ .Release.Namespace }} logs -l "app.kubernetes.io/name={{ include "kagent.name" . }}" --tail=100
+
+Node coverage:
+  kubectl get nodes --no-headers | wc -l  # Total nodes
+  kubectl --namespace {{ .Release.Namespace }} get pods -l "app.kubernetes.io/name={{ include "kagent.name" . }}" --no-headers | wc -l  # Kagent pods
+{{- end }}
+
+For more information, visit: https://github.com/kentik/kagent-helm
+
