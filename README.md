@@ -70,6 +70,9 @@ The StatefulSet creates two persistent volumes per pod:
 - `/opt/ua/keys` (100Mi): ed25519 keypair (agent identity)
 
 **Scaling**:
+
+Before scaling, you need to ensure that the secret with agent's identity includes keypairs for each additional agent (if scaling up). Then you can run a regular scale command:
+
 ```bash
 # Scale StatefulSet
 kubectl scale statefulset kagent --replicas=3
@@ -115,8 +118,6 @@ kubectl get pods -l app.kubernetes.io/name=kagent -o wide
 | `kagent.companyId` | Company ID for agent registration | `1013` |
 | `kagent.agentId` | Agent ID for Terraform tracking | `""` |
 | `kagent.releaseChannel` | Release channel (stable, beta, dev) | `stable` |
-| `kagent.supervisor.enabled` | Enable parent supervisor | `true` |
-| `kagent.supervisor.detached` | Run supervisor in detached mode | `true` |
 | `kagent.supervisor.dropPrivilegesEnabled` | Drop privileges after start | `false` |
 | `kagent.supervisor.cleanOrphansEnabled` | Clean orphaned processes | `false` |
 | `kagent.diskReservation.enabled` | Enable disk space reservation | `true` |
@@ -875,4 +876,3 @@ helm install kagent . --dry-run --debug
 ## License
 
 Copyright © 2025 Kentik
-

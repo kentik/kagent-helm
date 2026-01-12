@@ -124,10 +124,6 @@ Kagent container definition (shared across deployment types)
   - name: K_KEYS_DIRECTORY
     value: "/opt/ua/keys"
   # Supervisor configuration
-  - name: K_SUPERVISOR_ENABLED
-    value: {{ .Values.kagent.supervisor.enabled | default "true" | quote }}
-  - name: K_SUPERVISOR_DETACHED
-    value: {{ .Values.kagent.supervisor.detached | default "true" | quote }}
   - name: K_SUPERVISOR_DROP_PRIVILEGES_ENABLED
     value: {{ .Values.kagent.supervisor.dropPrivilegesEnabled | default "false" | quote }}
   - name: K_SUPERVISOR_CLEAN_ORPHANS_ENABLED
@@ -300,4 +296,3 @@ Pod volumes for non-StatefulSet workloads
 {{- end }}
 {{- end }}
 {{- end }}
-
