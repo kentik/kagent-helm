@@ -91,8 +91,8 @@ Validate all chart configuration
 {{- fail (printf "DaemonSet deployments only support 'hostPath' or 'emptyDir' for persistence.type, got: '%s'. Set persistence.type=hostPath for persistent storage." .Values.persistence.type) }}
 {{- end }}
 {{- if .Values.persistence.keypair.enabled }}
-{{- if and (ne .Values.persistence.keypair.type "hostPath") (ne .Values.persistence.keypair.type "emptyDir") (ne .Values.persistence.keypair.type "secret") }}
-{{- fail (printf "DaemonSet deployments only support 'hostPath', 'emptyDir', or 'secret' for persistence.keypair.type, got: '%s'." .Values.persistence.keypair.type) }}
+{{- if and (ne .Values.persistence.keypair.type "hostPath") (ne .Values.persistence.keypair.type "emptyDir") }}
+{{- fail (printf "DaemonSet deployments only support 'hostPath' or 'emptyDir' for persistence.keypair.type, got: '%s'." .Values.persistence.keypair.type) }}
 {{- end }}
 {{- end }}
 {{- end }}
