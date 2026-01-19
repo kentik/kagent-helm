@@ -69,16 +69,6 @@
         "supervisor": {
           "type": "object",
           "properties": {
-            "enabled": {
-              "type": "boolean",
-              "default": true,
-              "description": "Enable agent process supervisor (K_SUPERVISOR_ENABLED)"
-            },
-            "detached": {
-              "type": "boolean",
-              "default": true,
-              "description": "Run capabilities in separate processes (K_SUPERVISOR_DETACHED)"
-            },
             "dropPrivilegesEnabled": {
               "type": "boolean",
               "default": false,
@@ -402,4 +392,3 @@
     }
   }
 }
-

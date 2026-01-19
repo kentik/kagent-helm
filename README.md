@@ -10,30 +10,7 @@ A Helm chart for deploying Kentik Universal Agent (kagent) with support for mult
 
 ## Quick Start
 
-### 1. Obtain Provisioning Token
-
-Before installing the chart, create an agent via the Kentik CreateAgent API:
-
-```bash
-# Example: Call CreateAgent API to get provisioning token
-# (Actual API endpoint and authentication details from Kentik documentation)
-curl -X POST https://grpc.api.kentik.com/api/v1/agents \
-  -H "Authorization: Bearer <your-api-token>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "my-kagent",
-    "description": "Kagent deployed via Helm",
-    "site_id": "<your-site-id>"
-  }'
-
-# Response will include:
-# {
-#   "agent_id": "uuid-here",
-#   "provisioning_token": "single-use-token-here"
-# }
-```
-
-### 2. Install the Chart
+### 1. Install the Chart
 
 ```bash
 # Clone the repository
@@ -42,11 +19,7 @@ cd kagent-helm
 
 # Install with StatefulSet pattern (persistent storage)
 helm install kagent . \
-  --set deploymentType=statefulset
-
-# Install with DaemonSet pattern (one per node)
-helm install kagent . \
-  --set deploymentType=daemonset
+  --set-string kagent.companyId=YOUR_COMPANY_ID
 ```
 
 Alternatively, install directly from the GitHub repository without cloning:
@@ -54,16 +27,14 @@ Alternatively, install directly from the GitHub repository without cloning:
 ```bash
 # Install with StatefulSet pattern
 helm install kagent oci://ghcr.io/kentik/kagent-helm \
-  --set deploymentType=statefulset \
   --set-string kagent.companyId=YOUR_COMPANY_ID
 
 # Or from a specific version/tag
 helm install kagent https://github.com/kentik/kagent-helm/archive/refs/heads/main.tar.gz \
-  --set deploymentType=statefulset \
   --set-string kagent.companyId=YOUR_COMPANY_ID
 ```
 
-### 3. Verify Installation
+### 2. Verify Installation
 
 ```bash
 # Check deployment status
@@ -71,10 +42,12 @@ kubectl get pods -l app.kubernetes.io/name=kagent
 
 # View logs
 kubectl logs -l app.kubernetes.io/name=kagent --tail=100
-
-# Check agent status in Kentik Portal
-# Navigate to Settings → Universal Agents
 ```
+
+### 3. Authorize agent via UI
+- Go to Kentik Portal → Settings → Universal Agents
+- Find your new agent in the "Pending Authorization" section
+- Click "Authorize" to approve the agent
 
 ## Deployment Patterns
 
@@ -91,17 +64,15 @@ kubectl logs -l app.kubernetes.io/name=kagent --tail=100
 
 **Important**: The agent's ed25519 keypair is stored in `/opt/ua/keys/` and **MUST** persist across pod restarts as it's the agent's unique identity.
 
-**Example**:
-```bash
-helm install kagent . -f examples/statefulset-persistent.yaml
-```
-
 **Data Persistence**:
 The StatefulSet creates two persistent volumes per pod:
 - `/data` (10Gi default): Application data, buffers, logs, temp files
 - `/opt/ua/keys` (100Mi): ed25519 keypair (agent identity)
 
 **Scaling**:
+
+Before scaling, you need to ensure that the secret with agent's identity includes keypairs for each additional agent (if scaling up). Then you can run a regular scale command:
+
 ```bash
 # Scale StatefulSet
 kubectl scale statefulset kagent --replicas=3
@@ -126,11 +97,6 @@ kubectl delete pvc -l app.kubernetes.io/name=kagent
 - Tolerations for control-plane nodes included
 - Lower resource requests per pod
 
-**Example**:
-```bash
-helm install kagent . -f examples/daemonset-node-monitoring.yaml
-```
-
 **Node Coverage**:
 ```bash
 # Verify one pod per node
@@ -152,8 +118,6 @@ kubectl get pods -l app.kubernetes.io/name=kagent -o wide
 | `kagent.companyId` | Company ID for agent registration | `1013` |
 | `kagent.agentId` | Agent ID for Terraform tracking | `""` |
 | `kagent.releaseChannel` | Release channel (stable, beta, dev) | `stable` |
-| `kagent.supervisor.enabled` | Enable parent supervisor | `true` |
-| `kagent.supervisor.detached` | Run supervisor in detached mode | `true` |
 | `kagent.supervisor.dropPrivilegesEnabled` | Drop privileges after start | `false` |
 | `kagent.supervisor.cleanOrphansEnabled` | Clean orphaned processes | `false` |
 | `kagent.diskReservation.enabled` | Enable disk space reservation | `true` |
@@ -216,11 +180,16 @@ kubectl get pods -l app.kubernetes.io/name=kagent -o wide
 
 ### AWS (EKS)
 
-```bash
-helm install kagent . -f examples/statefulset-aws-gp3.yaml
+```yaml
+# statefulset-aws-gp3.yaml
+deploymentType: statefulset
+persistence:
+  pvc:
+    storageClass: "gp3"
+  keypair:
+    pvc:
+      storageClass: "gp3"
 ```
-
-Uses `gp3` storage class for cost-effective persistent storage.
 
 ### Azure (AKS)
 
@@ -499,9 +468,6 @@ If you prefer PersistentVolumeClaims for keypairs instead of secrets:
 helm install kagent . \
   --set deploymentType=statefulset \
   --set persistence.keypair.type=pvc
-
-# Or use the example values file
-helm install kagent . -f examples/statefulset-with-pvc-keypair.yaml
 ```
 
 #### Using hostPath for Keypair Storage (DaemonSet)
@@ -788,9 +754,6 @@ If you prefer PersistentVolumeClaims for keypairs instead of secrets:
 helm install kagent . \
   --set deploymentType=statefulset \
   --set persistence.keypair.type=pvc
-
-# Or use the example values file
-helm install kagent . -f examples/statefulset-with-pvc-keypair.yaml
 ```
 
 #### Using hostPath for Keypair Storage (DaemonSet)
@@ -913,4 +876,3 @@ helm install kagent . --dry-run --debug
 ## License
 
 Copyright © 2025 Kentik
-

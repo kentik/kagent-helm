@@ -55,8 +55,6 @@ kagent:
 
   # Parent supervisor controls
   supervisor:
-    enabled: true                 # K_SUPERVISOR_ENABLED
-    detached: true                # K_SUPERVISOR_DETACHED
     dropPrivilegesEnabled: false  # K_SUPERVISOR_DROP_PRIVILEGES_ENABLED
     cleanOrphansEnabled: false    # K_SUPERVISOR_CLEAN_ORPHANS_ENABLED
 
