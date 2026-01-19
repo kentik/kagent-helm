@@ -84,6 +84,19 @@ Validate all chart configuration
 {{- fail (printf "replicaCount must be at least 1 for deploymentType '%s', got: %d" .Values.deploymentType (int .Values.replicaCount)) }}
 {{- end }}
 {{- end }}
+{{- /* Validate persistence type for daemonset */ -}}
+{{- if eq .Values.deploymentType "daemonset" }}
+{{- if .Values.persistence.enabled }}
+{{- if and (ne .Values.persistence.type "hostPath") (ne .Values.persistence.type "emptyDir") }}
+{{- fail (printf "DaemonSet deployments only support 'hostPath' or 'emptyDir' for persistence.type, got: '%s'. Set persistence.type=hostPath for persistent storage." .Values.persistence.type) }}
+{{- end }}
+{{- if .Values.persistence.keypair.enabled }}
+{{- if and (ne .Values.persistence.keypair.type "hostPath") (ne .Values.persistence.keypair.type "emptyDir") (ne .Values.persistence.keypair.type "secret") }}
+{{- fail (printf "DaemonSet deployments only support 'hostPath', 'emptyDir', or 'secret' for persistence.keypair.type, got: '%s'." .Values.persistence.keypair.type) }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
 {{- end }}
 
 {{/*
