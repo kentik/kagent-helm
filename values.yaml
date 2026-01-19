@@ -42,21 +42,13 @@ kagent:
   # Provisioning token from CreateAgent API (pass via --set-string)
   provisioningToken: ""
 
-  # Company ID for agent registration and scoping (REQUIRED in many environments)
+  # Company ID for agent registration
   # Maps to env K_COMPANY_ID
   companyId: 1013
-
-  # Agent ID from CreateAgent API (optional, for Terraform tracking)
-  agentId: ""
 
   # Release channel for agent binary updates (stable, beta, dev)
   # Maps to env K_RELEASE_CHANNEL
   releaseChannel: stable
-
-  # Parent supervisor controls
-  supervisor:
-    dropPrivilegesEnabled: false  # K_SUPERVISOR_DROP_PRIVILEGES_ENABLED
-    cleanOrphansEnabled: false    # K_SUPERVISOR_CLEAN_ORPHANS_ENABLED
 
   # Disk space reservation to prevent OOS conditions
   diskReservation:
@@ -131,8 +123,8 @@ resources:
     cpu: 100m
     memory: 128Mi
   limits:
-    cpu: 500m
-    memory: 512Mi
+    cpu: 2
+    memory: 2048Mi
 
 # Liveness probe configuration
 # When enabled, automatically configures kagent health check server
@@ -190,7 +182,7 @@ persistence:
 
   # HostPath configuration (when type: hostPath, typically for DaemonSet)
   hostPath:
-    # Path on the host machine for kagent data
+    # Path on the host machine for kagent data. Make sure user 500:500 has read/write permissions.
     path: /var/lib/kagent/data
     # Type of hostPath volume (DirectoryOrCreate, Directory, etc.)
     type: DirectoryOrCreate
@@ -215,7 +207,7 @@ persistence:
 
     # HostPath configuration (when type: hostPath)
     hostPath:
-      # Path on the host machine for keypair
+      # Path on the host machine for keypair. Make sure user 500:500 has read/write permissions.
       path: /var/lib/kagent/keys
       # Type of hostPath volume
       type: DirectoryOrCreate
