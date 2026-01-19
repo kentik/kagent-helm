@@ -117,14 +117,17 @@ securityContext:
     - NET_RAW
   readOnlyRootFilesystem: false  # kagent needs to write to /opt/kentik
 
-# Resource limits and requests
+# Resource limits and requests.
+# Note that resource usage is highly dependent of what capabilities are enabled in kagent.
+# The default values here are a starting point for a minimal NMS deployment.
+# Refer to each capability documentation for recommended resources. Adjust these values based on your deployment size and enabled features.
 resources:
   requests:
-    cpu: 100m
-    memory: 128Mi
+    cpu: 1
+    memory: 1024Mi
   limits:
     cpu: 2
-    memory: 2048Mi
+    memory: 4096Mi
 
 # Liveness probe configuration
 # When enabled, automatically configures kagent health check server
