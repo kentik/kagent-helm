@@ -1,0 +1,28 @@
+deploymentType: daemonset
+
+kagent:
+  # Maps to env K_COMPANY_ID
+  companyId: 1013
+
+nodeSelector:
+  kbt_purpose: worker
+
+persistence:
+  enabled: true
+  type: hostPath
+  
+  hostPath:
+    # Path on the host machine for kagent data. Make sure user 500:500 has read/write permissions.
+    path: /var/lib/kagent/data
+    # Type of hostPath volume (DirectoryOrCreate, Directory, etc.)
+    type: DirectoryOrCreate
+
+  keypair:
+    enabled: true
+    type: hostPath
+
+    hostPath:
+      # Path on the host machine for keypair. Make sure user 500:500 has read/write permissions.
+      path: /var/lib/kagent/keys
+      # Type of hostPath volume
+      type: DirectoryOrCreate

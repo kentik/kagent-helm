@@ -66,21 +66,6 @@
           "default": "stdout",
           "description": "Logging destination (stdout, stderr, discard, or file path)"
         },
-        "supervisor": {
-          "type": "object",
-          "properties": {
-            "dropPrivilegesEnabled": {
-              "type": "boolean",
-              "default": false,
-              "description": "Enable privilege management system (K_SUPERVISOR_DROP_PRIVILEGES_ENABLED)"
-            },
-            "cleanOrphansEnabled": {
-              "type": "boolean",
-              "default": false,
-              "description": "Terminate orphaned capability subprocesses (K_SUPERVISOR_CLEAN_ORPHANS_ENABLED)"
-            }
-          }
-        },
         "healthCheck": {
           "type": "object",
           "properties": {

@@ -97,6 +97,20 @@ kubectl delete pvc -l app.kubernetes.io/name=kagent
 - Tolerations for control-plane nodes included
 - Lower resource requests per pod
 
+**Storage**:
+DaemonSet deployments only support `hostPath` for persistent storage (not PVC). Set `persistence.type: hostPath` when using DaemonSet.
+
+Check [examples/daemon-set.yaml](examples/daemon-set.yaml) to get started.
+
+**hostPath Permissions**:
+The hostPath directories on each node must be readable and writable by user ID 500 (the default `runAsUser`). Create and set permissions before deploying:
+
+```bash
+# On each node, create directories with correct ownership
+sudo mkdir -p /var/lib/kagent/data /var/lib/kagent/keys
+sudo chown -R 500:500 /var/lib/kagent
+```
+
 **Node Coverage**:
 ```bash
 # Verify one pod per node
@@ -118,8 +132,6 @@ kubectl get pods -l app.kubernetes.io/name=kagent -o wide
 | `kagent.companyId` | Company ID for agent registration | `1013` |
 | `kagent.agentId` | Agent ID for Terraform tracking | `""` |
 | `kagent.releaseChannel` | Release channel (stable, beta, dev) | `stable` |
-| `kagent.supervisor.dropPrivilegesEnabled` | Drop privileges after start | `false` |
-| `kagent.supervisor.cleanOrphansEnabled` | Clean orphaned processes | `false` |
 | `kagent.diskReservation.enabled` | Enable disk space reservation | `true` |
 | `kagent.diskReservation.initialSize` | Initial reserved disk space | `200MB` |
 | `kagent.logDest` | Log destination (stdout, stderr, discard, filename) | `stdout` |

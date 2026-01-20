@@ -84,6 +84,19 @@ Validate all chart configuration
 {{- fail (printf "replicaCount must be at least 1 for deploymentType '%s', got: %d" .Values.deploymentType (int .Values.replicaCount)) }}
 {{- end }}
 {{- end }}
+{{- /* Validate persistence type for daemonset */ -}}
+{{- if eq .Values.deploymentType "daemonset" }}
+{{- if .Values.persistence.enabled }}
+{{- if and (ne .Values.persistence.type "hostPath") (ne .Values.persistence.type "emptyDir") }}
+{{- fail (printf "DaemonSet deployments only support 'hostPath' or 'emptyDir' for persistence.type, got: '%s'. Set persistence.type=hostPath for persistent storage." .Values.persistence.type) }}
+{{- end }}
+{{- if .Values.persistence.keypair.enabled }}
+{{- if and (ne .Values.persistence.keypair.type "hostPath") (ne .Values.persistence.keypair.type "emptyDir") }}
+{{- fail (printf "DaemonSet deployments only support 'hostPath' or 'emptyDir' for persistence.keypair.type, got: '%s'." .Values.persistence.keypair.type) }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
 {{- end }}
 
 {{/*
@@ -105,11 +118,6 @@ Kagent container definition (shared across deployment types)
         name: {{ include "kagent.fullname" . }}-secret
         key: K_REGISTER_PROVISIONING_TOKEN
   {{- end }}
-  # Optional: Agent ID for tracking
-  {{- if .Values.kagent.agentId }}
-  - name: K_AGENT_ID
-    value: {{ .Values.kagent.agentId | quote }}
-  {{- end }}
   # Core configuration
   - name: K_API_ROOT
     value: {{ .Values.kagent.apiEndpoint | default "grpc.api.kentik.com:443" | quote }}
@@ -123,11 +131,6 @@ Kagent container definition (shared across deployment types)
     value: "/opt/kentik"
   - name: K_KEYS_DIRECTORY
     value: "/opt/ua/keys"
-  # Supervisor configuration
-  - name: K_SUPERVISOR_DROP_PRIVILEGES_ENABLED
-    value: {{ .Values.kagent.supervisor.dropPrivilegesEnabled | default "false" | quote }}
-  - name: K_SUPERVISOR_CLEAN_ORPHANS_ENABLED
-    value: {{ .Values.kagent.supervisor.cleanOrphansEnabled | default "true" | quote }}
   # Health check server configuration (auto-enabled when probes are enabled)
   {{- if or .Values.livenessProbe.enabled .Values.readinessProbe.enabled }}
   - name: K_HC_SERVER_ENABLED
