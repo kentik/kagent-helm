@@ -31,7 +31,7 @@ replicaCount: 1
 image:
   repository: kentik/kagent
   pullPolicy: IfNotPresent
-  tag: v5.0.1
+  tag: v5.0.3
 
 imagePullSecrets: []
 nameOverride: ""
@@ -44,7 +44,7 @@ kagent:
 
   # Company ID for agent registration
   # Maps to env K_COMPANY_ID
-  companyId: 1013
+  companyId: ""
 
   # Release channel for agent binary updates (stable, beta, dev)
   # Maps to env K_RELEASE_CHANNEL
@@ -77,6 +77,7 @@ rbac:
   create: false
 
 # Network policy configuration (opt-in, disabled by default for compatibility)
+# Configure according to organizational policies
 networkPolicy:
   enabled: false
   egress:
@@ -114,7 +115,7 @@ securityContext:
     drop:
     - ALL
     add:
-    - NET_RAW
+    - NET_RAW # Required for packet capture capabilities
   readOnlyRootFilesystem: false  # kagent needs to write to /opt/kentik
 
 # Resource limits and requests.
@@ -144,7 +145,7 @@ livenessProbe:
 # Readiness probe configuration
 # When enabled, automatically configures kagent health check server
 readinessProbe:
-  enabled: false
+  enabled: true
   httpGet:
     path: /hc
     port: 8099

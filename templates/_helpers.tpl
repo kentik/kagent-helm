@@ -72,9 +72,6 @@ Validate all chart configuration
 {{- if not .Values.kagent.companyId }}
 {{- fail "kagent.companyId is required. Provide via: --set-string kagent.companyId=YOUR_COMPANY_ID\nGet your company ID from the Kentik Portal (Settings → Company)" }}
 {{- end }}
-{{/*{{- if not .Values.kagent.provisioningToken }}*/}}
-{{/*{{- fail "kagent.provisioningToken is required. Provide via: --set-string kagent.provisioningToken=YOUR_TOKEN\nGenerate a token via CreateAgent API or Kentik Portal (Settings → Agents → Create Agent)" }}*/}}
-{{/*{{- end }}*/}}
 {{- /* Validate replica count for statefulset */ -}}
 {{- if eq .Values.deploymentType "statefulset" }}
 {{- if not .Values.replicaCount }}
