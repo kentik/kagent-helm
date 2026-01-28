@@ -221,11 +221,6 @@ tolerations:
   {{- toYaml . | nindent 2 }}
 {{- end }}
 {{- end }}
-{{- $podVolumes := include "kagent.podVolumes" . }}
-{{- if $podVolumes }}
-volumes:
-{{- $podVolumes | nindent 2 }}
-{{- end }}
 {{- end }}
 
 {{/*
@@ -248,54 +243,5 @@ volumeMounts:
 - name: data
   mountPath: /opt/ua/keys
   subPath: keys
-{{- end }}
-{{- end }}
-
-{{/*
-Pod volumes for non-StatefulSet workloads
-*/}}
-{{- define "kagent.podVolumes" -}}
-{{- if ne .Values.deploymentType "statefulset" }}
-{{- /* Data volume configuration */ -}}
-{{- if .Values.persistence.enabled }}
-{{- if eq .Values.persistence.type "hostPath" }}
-- name: data
-  hostPath:
-    path: {{ .Values.persistence.hostPath.path }}
-    type: {{ .Values.persistence.hostPath.type | default "DirectoryOrCreate" }}
-{{- else if eq .Values.persistence.type "pvc" }}
-- name: data
-  persistentVolumeClaim:
-    claimName: {{ include "kagent.fullname" . }}-data
-{{- else }}
-- name: data
-  emptyDir: {}
-{{- end }}
-{{- else }}
-- name: data
-  emptyDir: {}
-{{- end }}
-{{- /* Keypair volume configuration */ -}}
-{{- if .Values.persistence.keypair.enabled }}
-{{- if eq .Values.persistence.keypair.type "secret" }}
-- name: keypair-secret
-  secret:
-{{/*    Bind first key from Secret as keys volume*/}}
-    secretName: {{ include "kagent.fullname" . }}-0-secret
-    defaultMode: 0400
-{{- else if eq .Values.persistence.keypair.type "hostPath" }}
-- name: keys
-  hostPath:
-    path: {{ .Values.persistence.keypair.hostPath.path }}
-    type: {{ .Values.persistence.keypair.hostPath.type | default "DirectoryOrCreate" }}
-{{- else if eq .Values.persistence.keypair.type "pvc" }}
-- name: keys
-  persistentVolumeClaim:
-    claimName: {{ include "kagent.fullname" . }}-keys
-{{- else }}
-- name: keys
-  emptyDir: {}
-{{- end }}
-{{- end }}
 {{- end }}
 {{- end }}
