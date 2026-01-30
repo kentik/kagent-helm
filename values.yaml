@@ -109,13 +109,25 @@ podSecurityContext:
   fsGroup: 500
 
 # Container security context
+#
+# Some Universal Agent capabilities require specific Linux capabilities to function
+# correctly. By default, all capabilities are dropped and only the required ones are
+# added back. If you are not using certain UA capabilities, you can remove the
+# corresponding Linux capabilities from the 'add' list to follow the principle of
+# least privilege.
+#
+# Linux capabilities mapped to Universal Agent capabilities:
+#   NET_ADMIN        - kdns (network administration operations)
+#   NET_BIND_SERVICE - kbgp, kproxy (bind to privileged ports below 1024)
+#   NET_RAW          - ranger/nms,ksynth,livesynth (raw sockets for packet capture)
+
 securityContext:
   allowPrivilegeEscalation: false
   capabilities:
     drop:
     - ALL
     add:
-    - NET_RAW # Required for packet capture capabilities
+    - NET_RAW
   readOnlyRootFilesystem: false  # kagent needs to write to /opt/kentik
 
 # Resource limits and requests.
