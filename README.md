@@ -128,7 +128,6 @@ kubectl get pods -l app.kubernetes.io/name=kagent -o wide
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `kagent.provisioningToken` | Provisioning token from CreateAgent API | `""` |
 | `kagent.companyId` | Company ID for agent registration | `1013` |
 | `kagent.agentId` | Agent ID for Terraform tracking | `""` |
 | `kagent.releaseChannel` | Release channel (stable, beta, dev) | `stable` |
