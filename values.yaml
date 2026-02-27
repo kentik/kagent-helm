@@ -39,8 +39,6 @@ fullnameOverride: ""
 
 # Kagent configuration
 kagent:
-  # Provisioning token from CreateAgent API (pass via --set-string)
-  provisioningToken: ""
 
   # Company ID for agent registration
   # Maps to env K_COMPANY_ID

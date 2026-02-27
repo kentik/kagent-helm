@@ -42,10 +42,6 @@
       "type": "object",
       "required": ["companyId"],
       "properties": {
-        "provisioningToken": {
-          "type": "string",
-          "description": "Pre-authorized token from Kentik CreateAgent API (optional)"
-        },
         "companyId": {
           "type": "string",
           "minLength": 1,

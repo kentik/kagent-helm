@@ -107,14 +107,6 @@ Kagent container definition (shared across deployment types)
   # Required: Company ID for agent scoping
   - name: K_COMPANY_ID
     value: {{ required "kagent.companyId is required" .Values.kagent.companyId | quote }}
-  # Required: Provisioning token from Secret
-  {{- if .Values.kagent.provisioningToken }}
-  - name: K_REGISTER_PROVISIONING_TOKEN
-    valueFrom:
-      secretKeyRef:
-        name: {{ include "kagent.fullname" . }}-secret
-        key: K_REGISTER_PROVISIONING_TOKEN
-  {{- end }}
   # Core configuration
   - name: K_API_ROOT
     value: {{ .Values.kagent.apiEndpoint | default "grpc.api.kentik.com:443" | quote }}
