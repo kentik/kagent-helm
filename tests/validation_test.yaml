@@ -1,0 +1,19 @@
+suite: Validation tests
+templates:
+  - statefulset.yaml
+set:
+  kagent.companyId: "12345"
+
+tests:
+  - it: should fail when companyId is empty
+    set:
+      kagent.companyId: ""
+    asserts:
+      - failedTemplate: {}
+
+  - it: should not render statefulset for invalid deploymentType
+    set:
+      deploymentType: daemonset
+    asserts:
+      - hasDocuments:
+          count: 0
