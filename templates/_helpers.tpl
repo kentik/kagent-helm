@@ -100,6 +100,8 @@ Validate all chart configuration
 Kagent container definition (shared across deployment types)
 */}}
 {{- define "kagent.container" -}}
+{{- $lp := .Values.livenessProbe | default dict }}
+{{- $rp := .Values.readinessProbe | default dict }}
 - name: kagent
   image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
   imagePullPolicy: {{ .Values.image.pullPolicy }}
@@ -121,8 +123,6 @@ Kagent container definition (shared across deployment types)
   - name: K_KEYS_DIRECTORY
     value: "/opt/ua/keys"
   # Health check server configuration (auto-enabled when probes are enabled)
-  {{- $lp := .Values.livenessProbe | default dict }}
-  {{- $rp := .Values.readinessProbe | default dict }}
   {{- if or $lp.enabled $rp.enabled }}
   - name: K_HC_SERVER_ENABLED
     value: "true"
@@ -149,29 +149,27 @@ Kagent container definition (shared across deployment types)
     {{- toYaml .Values.securityContext | nindent 4 }}
   resources:
     {{- toYaml .Values.resources | nindent 4 }}
-  {{- $lp2 := .Values.livenessProbe | default dict }}
-  {{- if $lp2.enabled }}
+  {{- if $lp.enabled }}
   livenessProbe:
-    {{- if $lp2.httpGet }}
+    {{- if $lp.httpGet }}
     httpGet:
-      {{- toYaml $lp2.httpGet | nindent 6 }}
+      {{- toYaml $lp.httpGet | nindent 6 }}
     {{- end }}
-    initialDelaySeconds: {{ $lp2.initialDelaySeconds | default 30 }}
-    periodSeconds: {{ $lp2.periodSeconds | default 10 }}
-    timeoutSeconds: {{ $lp2.timeoutSeconds | default 5 }}
-    failureThreshold: {{ $lp2.failureThreshold | default 3 }}
+    initialDelaySeconds: {{ $lp.initialDelaySeconds | default 30 }}
+    periodSeconds: {{ $lp.periodSeconds | default 10 }}
+    timeoutSeconds: {{ $lp.timeoutSeconds | default 5 }}
+    failureThreshold: {{ $lp.failureThreshold | default 3 }}
   {{- end }}
-  {{- $rp2 := .Values.readinessProbe | default dict }}
-  {{- if $rp2.enabled }}
+  {{- if $rp.enabled }}
   readinessProbe:
-    {{- if $rp2.httpGet }}
+    {{- if $rp.httpGet }}
     httpGet:
-      {{- toYaml $rp2.httpGet | nindent 6 }}
+      {{- toYaml $rp.httpGet | nindent 6 }}
     {{- end }}
-    initialDelaySeconds: {{ $rp2.initialDelaySeconds | default 5 }}
-    periodSeconds: {{ $rp2.periodSeconds | default 10 }}
-    timeoutSeconds: {{ $rp2.timeoutSeconds | default 5 }}
-    failureThreshold: {{ $rp2.failureThreshold | default 3 }}
+    initialDelaySeconds: {{ $rp.initialDelaySeconds | default 5 }}
+    periodSeconds: {{ $rp.periodSeconds | default 10 }}
+    timeoutSeconds: {{ $rp.timeoutSeconds | default 5 }}
+    failureThreshold: {{ $rp.failureThreshold | default 3 }}
   {{- end }}
 {{- end }}
 
