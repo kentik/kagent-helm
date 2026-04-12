@@ -91,6 +91,11 @@ tests:
           content:
             name: K_HC_SERVER_ENABLED
             value: "true"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: K_HC_SERVER_ADDRESS
+            value: ":8099"
 
   - it: should use correct health check port from livenessProbe
     set:
