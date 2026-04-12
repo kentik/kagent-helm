@@ -54,10 +54,10 @@ tests:
       - isNull:
           path: spec.template.spec.containers[0].readinessProbe
 
-  - it: should include K_K8S_HELM env variable
+  - it: should include K_COMPANY_ID env variable
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: K_K8S_HELM
-            value: "true"
+            name: K_COMPANY_ID
+            value: "12345"

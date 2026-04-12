@@ -107,14 +107,6 @@ tests:
             name: K_HC_SERVER_ADDRESS
             value: ":9090"
 
-  - it: should include K_K8S_HELM env variable
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: K_K8S_HELM
-            value: "true"
-
   - it: should set correct probe defaults
     asserts:
       - equal:
