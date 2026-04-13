@@ -1,0 +1,76 @@
+name: Helm Chart CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    name: Lint Chart
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.17.3
+
+      - name: Helm lint (default values)
+        run: helm lint . --set-string kagent.companyId=test-company
+
+      - name: Helm lint (probes disabled)
+        run: helm lint . --set-string kagent.companyId=test-company --set livenessProbe.enabled=false --set readinessProbe.enabled=false
+
+      - name: Helm lint (probes absent)
+        run: helm lint . --set-string kagent.companyId=test-company --set livenessProbe=null --set readinessProbe=null
+
+  unittest:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.17.3
+
+      - name: Install helm-unittest plugin
+        run: helm plugin install https://github.com/helm-unittest/helm-unittest.git --version v1.0.3
+
+      - name: Run unit tests
+        run: helm unittest . --output-type JUnit --output-file test-results.xml
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: test-results.xml
+
+  template-render:
+    name: Template Rendering
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        scenario:
+          - name: statefulset-defaults
+            args: "--set-string kagent.companyId=test-company"
+          - name: statefulset-no-probes
+            args: "--set-string kagent.companyId=test-company --set livenessProbe=null --set readinessProbe=null"
+          - name: statefulset-probes-disabled
+            args: "--set-string kagent.companyId=test-company --set livenessProbe.enabled=false --set readinessProbe.enabled=false"
+          - name: daemonset-defaults
+            args: "--set-string kagent.companyId=test-company --set deploymentType=daemonset --set persistence.type=hostPath --set persistence.keypair.type=hostPath"
+          - name: daemonset-no-probes
+            args: "--set-string kagent.companyId=test-company --set deploymentType=daemonset --set persistence.type=hostPath --set persistence.keypair.type=hostPath --set livenessProbe=null --set readinessProbe=null"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.17.3
+
+      - name: "Template render: ${{ matrix.scenario.name }}"
+        run: helm template test-release . ${{ matrix.scenario.args }}

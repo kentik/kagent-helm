@@ -100,6 +100,8 @@ Validate all chart configuration
 Kagent container definition (shared across deployment types)
 */}}
 {{- define "kagent.container" -}}
+{{- $lp := .Values.livenessProbe | default dict }}
+{{- $rp := .Values.readinessProbe | default dict }}
 - name: kagent
   image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
   imagePullPolicy: {{ .Values.image.pullPolicy }}
@@ -123,13 +125,13 @@ Kagent container definition (shared across deployment types)
   - name: K_K8S_HELM
     value: "true"
   # Health check server configuration (auto-enabled when probes are enabled)
-  {{- if or .Values.livenessProbe.enabled .Values.readinessProbe.enabled }}
+  {{- if or $lp.enabled $rp.enabled }}
   - name: K_HC_SERVER_ENABLED
     value: "true"
   - name: K_HC_SERVER_NETWORK
     value: "tcp4"
   - name: K_HC_SERVER_ADDRESS
-    value: {{ printf ":%d" (.Values.livenessProbe.httpGet.port | int) | quote }}
+    value: {{ printf ":%d" (($lp.httpGet | default dict).port | default ($rp.httpGet | default dict).port | default 8099 | int) | quote }}
   {{- end }}
   # Disk space reservation
   - name: K_DISK_SPACE_RESERVATION_ENABLED
@@ -149,27 +151,27 @@ Kagent container definition (shared across deployment types)
     {{- toYaml .Values.securityContext | nindent 4 }}
   resources:
     {{- toYaml .Values.resources | nindent 4 }}
-  {{- if .Values.livenessProbe.enabled }}
+  {{- if $lp.enabled }}
   livenessProbe:
-    {{- if .Values.livenessProbe.httpGet }}
+    {{- if $lp.httpGet }}
     httpGet:
-      {{- toYaml .Values.livenessProbe.httpGet | nindent 6 }}
+      {{- toYaml $lp.httpGet | nindent 6 }}
     {{- end }}
-    initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds | default 30 }}
-    periodSeconds: {{ .Values.livenessProbe.periodSeconds | default 10 }}
-    timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds | default 5 }}
-    failureThreshold: {{ .Values.livenessProbe.failureThreshold | default 3 }}
+    initialDelaySeconds: {{ $lp.initialDelaySeconds | default 30 }}
+    periodSeconds: {{ $lp.periodSeconds | default 10 }}
+    timeoutSeconds: {{ $lp.timeoutSeconds | default 5 }}
+    failureThreshold: {{ $lp.failureThreshold | default 3 }}
   {{- end }}
-  {{- if .Values.readinessProbe.enabled }}
+  {{- if $rp.enabled }}
   readinessProbe:
-    {{- if .Values.readinessProbe.httpGet }}
+    {{- if $rp.httpGet }}
     httpGet:
-      {{- toYaml .Values.readinessProbe.httpGet | nindent 6 }}
+      {{- toYaml $rp.httpGet | nindent 6 }}
     {{- end }}
-    initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds | default 5 }}
-    periodSeconds: {{ .Values.readinessProbe.periodSeconds | default 10 }}
-    timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds | default 5 }}
-    failureThreshold: {{ .Values.readinessProbe.failureThreshold | default 3 }}
+    initialDelaySeconds: {{ $rp.initialDelaySeconds | default 5 }}
+    periodSeconds: {{ $rp.periodSeconds | default 10 }}
+    timeoutSeconds: {{ $rp.timeoutSeconds | default 5 }}
+    failureThreshold: {{ $rp.failureThreshold | default 3 }}
   {{- end }}
 {{- end }}
 
