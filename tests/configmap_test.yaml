@@ -1,0 +1,20 @@
+suite: ConfigMap tests
+templates:
+  - configmap.yaml
+set:
+  kagent.companyId: "12345"
+
+tests:
+  - it: should not render ConfigMap when disabled (default)
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render ConfigMap when enabled
+    set:
+      configmap.enabled: true
+      configmap.data:
+        K_CUSTOM_SETTING: "value"
+    asserts:
+      - isKind:
+          of: ConfigMap
