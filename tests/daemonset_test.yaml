@@ -13,7 +13,30 @@ tests:
       - isKind:
           of: DaemonSet
 
-  - it: should include liveness and readiness probes when enabled (default)
+  - it: should not include probes by default
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: K_HC_SERVER_ENABLED
+            value: "true"
+      - isNull:
+          path: spec.template.spec.containers[0].livenessProbe
+      - isNull:
+          path: spec.template.spec.containers[0].readinessProbe
+
+  - it: should include liveness and readiness probes when explicitly enabled
+    set:
+      livenessProbe:
+        enabled: true
+        httpGet:
+          path: /hc
+          port: 8099
+      readinessProbe:
+        enabled: true
+        httpGet:
+          path: /hc
+          port: 8099
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env

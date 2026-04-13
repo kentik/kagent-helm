@@ -140,30 +140,6 @@ resources:
     cpu: 2
     memory: 4096Mi
 
-# Liveness probe configuration
-# When enabled, automatically configures kagent health check server
-livenessProbe:
-  enabled: true
-  httpGet:
-    path: /hc
-    port: 8099
-  initialDelaySeconds: 30
-  periodSeconds: 10
-  timeoutSeconds: 5
-  failureThreshold: 3
-
-# Readiness probe configuration
-# When enabled, automatically configures kagent health check server
-readinessProbe:
-  enabled: true
-  httpGet:
-    path: /hc
-    port: 8099
-  initialDelaySeconds: 5
-  periodSeconds: 10
-  timeoutSeconds: 5
-  failureThreshold: 3
-
 # Node selector
 nodeSelector: {}
 
