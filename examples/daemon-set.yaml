@@ -2,7 +2,7 @@ deploymentType: daemonset
 
 kagent:
   # Maps to env K_COMPANY_ID
-  companyId: 1013
+  companyId: 1111111
 
 nodeSelector:
   kbt_purpose: worker

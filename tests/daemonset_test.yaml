@@ -1,0 +1,86 @@
+suite: DaemonSet tests
+templates:
+  - daemonset.yaml
+set:
+  kagent.companyId: "12345"
+  deploymentType: daemonset
+  persistence.type: hostPath
+  persistence.keypair.type: hostPath
+
+tests:
+  - it: should render a DaemonSet
+    asserts:
+      - isKind:
+          of: DaemonSet
+
+  - it: should not include probes by default
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: K_HC_SERVER_ENABLED
+            value: "true"
+      - isNull:
+          path: spec.template.spec.containers[0].livenessProbe
+      - isNull:
+          path: spec.template.spec.containers[0].readinessProbe
+
+  - it: should include liveness and readiness probes when explicitly enabled
+    set:
+      livenessProbe:
+        enabled: true
+        httpGet:
+          path: /hc
+          port: 8099
+      readinessProbe:
+        enabled: true
+        httpGet:
+          path: /hc
+          port: 8099
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: K_HC_SERVER_ENABLED
+            value: "true"
+      - isNotNull:
+          path: spec.template.spec.containers[0].livenessProbe
+      - isNotNull:
+          path: spec.template.spec.containers[0].readinessProbe
+
+  - it: should render without probes when livenessProbe and readinessProbe are absent
+    set:
+      livenessProbe: null
+      readinessProbe: null
+    asserts:
+      - isKind:
+          of: DaemonSet
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: K_HC_SERVER_ENABLED
+            value: "true"
+      - isNull:
+          path: spec.template.spec.containers[0].livenessProbe
+      - isNull:
+          path: spec.template.spec.containers[0].readinessProbe
+
+  - it: should render without probes when probes are explicitly disabled
+    set:
+      livenessProbe.enabled: false
+      readinessProbe.enabled: false
+    asserts:
+      - isKind:
+          of: DaemonSet
+      - isNull:
+          path: spec.template.spec.containers[0].livenessProbe
+      - isNull:
+          path: spec.template.spec.containers[0].readinessProbe
+
+  - it: should include K_COMPANY_ID env variable
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: K_COMPANY_ID
+            value: "12345"
