@@ -122,6 +122,8 @@ Kagent container definition (shared across deployment types)
     value: "/opt/kentik"
   - name: K_KEYS_DIRECTORY
     value: "/opt/ua/keys"
+  - name: K_K8S_HELM
+    value: "true"
   # Health check server configuration (auto-enabled when probes are enabled)
   {{- if or $lp.enabled $rp.enabled }}
   - name: K_HC_SERVER_ENABLED
