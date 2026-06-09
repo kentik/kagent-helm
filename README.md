@@ -132,7 +132,7 @@ kubectl get pods -l app.kubernetes.io/name=kagent -o wide
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `kagent.companyId` | Company ID for agent registration (REQUIRED) | `""` |
-| `kagent.provisioningToken` | Provisioning token for agent registration (REQUIRED, stored as Secret) | `""` |
+| `kagent.provisioningToken` | Provisioning token for agent registration (REQUIRED; stored in a Kubernetes Secret and injected via `secretKeyRef`) | `""` |
 | `kagent.agentId` | Agent ID for Terraform tracking | `""` |
 | `kagent.releaseChannel` | Release channel (stable, beta, dev) | `stable` |
 | `kagent.diskReservation.enabled` | Enable disk space reservation | `true` |
