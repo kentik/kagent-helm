@@ -3,6 +3,7 @@ templates:
   - statefulset.yaml
 set:
   kagent.companyId: "12345"
+  kagent.provisioningToken: "test-token"
 
 tests:
   - it: should render a StatefulSet with default values

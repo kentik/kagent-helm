@@ -44,6 +44,10 @@ kagent:
   # Maps to env K_COMPANY_ID
   companyId: ""
 
+  # Provisioning token for agent registration
+  # Maps to env K_REGISTER_PROVISIONING_TOKEN (injected via Secret)
+  provisioningToken: ""
+
   # Release channel for agent binary updates (stable, beta, dev)
   # Maps to env K_RELEASE_CHANNEL
   releaseChannel: stable

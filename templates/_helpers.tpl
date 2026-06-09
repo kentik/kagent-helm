@@ -72,6 +72,9 @@ Validate all chart configuration
 {{- if not .Values.kagent.companyId }}
 {{- fail "kagent.companyId is required. Provide via: --set-string kagent.companyId=YOUR_COMPANY_ID\nGet your company ID from the Kentik Portal (Settings → Company)" }}
 {{- end }}
+{{- if not .Values.kagent.provisioningToken }}
+{{- fail "kagent.provisioningToken is required. Provide via: --set-string kagent.provisioningToken=YOUR_TOKEN" }}
+{{- end }}
 {{- /* Validate replica count for statefulset */ -}}
 {{- if eq .Values.deploymentType "statefulset" }}
 {{- if not .Values.replicaCount }}
@@ -109,6 +112,12 @@ Kagent container definition (shared across deployment types)
   # Required: Company ID for agent scoping
   - name: K_COMPANY_ID
     value: {{ required "kagent.companyId is required" .Values.kagent.companyId | quote }}
+  # Required: Provisioning token (injected via Secret)
+  - name: K_REGISTER_PROVISIONING_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: {{ include "kagent.fullname" . }}-provisioning-token
+        key: token
   # Core configuration
   - name: K_API_ROOT
     value: {{ .Values.kagent.apiEndpoint | default "grpc.api.kentik.com:443" | quote }}
