@@ -69,11 +69,11 @@ Validate all chart configuration
 {{- fail (printf "Invalid deploymentType '%s'. Must be one of: statefulset, daemonset" .Values.deploymentType) }}
 {{- end }}
 {{- /* Validate required kagent configuration */ -}}
-{{- if not .Values.kagent.companyId }}
+{{- if not (.Values.kagent.companyId | toString | trim) }}
 {{- fail "kagent.companyId is required. Provide via: --set-string kagent.companyId=YOUR_COMPANY_ID\nGet your company ID from the Kentik Portal (Settings → Company)" }}
 {{- end }}
-{{- if not .Values.kagent.provisioningToken }}
-{{- fail "kagent.provisioningToken is required. Provide via: --set-string kagent.provisioningToken=YOUR_TOKEN" }}
+{{- if not (.Values.kagent.provisioningToken | toString | trim) }}
+{{- fail "kagent.provisioningToken is required. Provide via: --set-string kagent.provisioningToken=YOUR_PROVISIONING_TOKEN" }}
 {{- end }}
 {{- /* Validate replica count for statefulset */ -}}
 {{- if eq .Values.deploymentType "statefulset" }}
