@@ -110,7 +110,7 @@ build_request_body() {
     fi
 
     if [[ -n "$ALLOWED_PRIVATE_CIDRS" ]]; then
-        body=$(echo "$body" | jq --arg v "$ALLOWED_PRIVATE_CIDRS" '. + {allowedPrivateCidrs: ($v | split(","))}')
+        body=$(echo "$body" | jq --arg v "$ALLOWED_PRIVATE_CIDRS" '. + {allowedPrivateCidrs: ($v | split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length>0)))}')
     fi
 
     if [[ -n "$ALLOWED_PUBLIC_CIDRS" ]]; then
