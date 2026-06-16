@@ -143,7 +143,7 @@ do_post() {
             -H "X-CH-Auth-Email: $K_API_EMAIL" \
             -H "X-CH-Auth-API-Token: $K_API_TOKEN" \
             -d "$body" \
-            "$url"
+            "$url" || printf '\n000'
     else
         # wget: capture response body + status
         local tmp_file
