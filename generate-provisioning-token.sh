@@ -115,7 +115,7 @@ do_post() {
     local url="$1"
     local body="$2"
 
-    curl -s -w "\n%{http_code}" \
+    curl -sS -w "\n%{http_code}" \
         -X POST \
         -H "Content-Type: application/json" \
         -H "X-CH-Auth-Email: $K_API_EMAIL" \
