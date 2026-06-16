@@ -155,7 +155,7 @@ do_post() {
             --header="X-CH-Auth-API-Token: $K_API_TOKEN" \
             --post-data="$body" \
             --server-response \
-            "$url" 2>&1 | awk '/HTTP\//{print $2}' | tail -1)
+            "$url" 2>&1 | awk '/HTTP\//{print $2}' | tail -1 || true)
         cat "$tmp_file"
         echo ""
         echo "${http_code:-000}"
