@@ -114,7 +114,6 @@ build_request_body() {
 do_post() {
     local url="$1"
     local body="$2"
-    local exit_code=0
 
     curl -s -w "\n%{http_code}" \
         -X POST \
@@ -122,11 +121,7 @@ do_post() {
         -H "X-CH-Auth-Email: $K_API_EMAIL" \
         -H "X-CH-Auth-API-Token: $K_API_TOKEN" \
         -d "$body" \
-        "$url" || exit_code=$?
-
-    if [[ $exit_code -ne 0 ]]; then
-        die "curl request failed (exit code $exit_code). Check network connectivity and API host: $url"
-    fi
+        "$url"
 }
 
 # ============================================================================
@@ -212,11 +207,11 @@ echo "  API:    $API_ROOT"
 echo "  Name:   $TOKEN_NAME"
 echo ""
 
-RESPONSE=$(do_post "$URL" "$BODY")
+RESPONSE=$(do_post "$URL" "$BODY") || die "curl request failed. Check network connectivity and API host: $URL"
 HTTP_CODE=$(echo "$RESPONSE" | tail -1)
 RESPONSE_BODY=$(echo "$RESPONSE" | sed '$d')
 
-if [[ "$HTTP_CODE" -ne 200 ]]; then
+if [[ -z "$HTTP_CODE" || "$HTTP_CODE" -ne 200 ]]; then
     echo "API request failed (HTTP $HTTP_CODE):" >&2
     if echo "$RESPONSE_BODY" | jq . >/dev/null 2>&1; then
         echo "$RESPONSE_BODY" | jq . >&2
