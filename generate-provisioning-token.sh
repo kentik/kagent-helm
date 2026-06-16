@@ -114,7 +114,7 @@ build_request_body() {
     fi
 
     if [[ -n "$ALLOWED_PUBLIC_CIDRS" ]]; then
-        body=$(echo "$body" | jq --arg v "$ALLOWED_PUBLIC_CIDRS" '. + {allowedPublicCidrs: ($v | split(","))}')
+        body=$(echo "$body" | jq --arg v "$ALLOWED_PUBLIC_CIDRS" '. + {allowedPublicCidrs: ($v | split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length>0)))}')
     fi
 
     if [[ "$REQUIRES_APPROVAL" == "true" ]]; then
