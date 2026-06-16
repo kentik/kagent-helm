@@ -199,8 +199,8 @@ fi
 
 API_ROOT="${API_ROOT#https://}"
 API_ROOT="${API_ROOT#http://}"
+API_ROOT="${API_ROOT%/}"
 URL="https://${API_ROOT}/kagent/v202401/provisioning-tokens"
-BODY=$(build_request_body)
 
 echo "Creating provisioning token..."
 echo "  API:    $API_ROOT"
