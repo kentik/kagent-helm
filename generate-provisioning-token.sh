@@ -11,8 +11,7 @@
 # Token Configuration:
 #   --name <name>                   Required. User-friendly name for the token.
 #   --max-usage <count>             Max agents that can use this token (default: 1)
-#                                   NOTE: must match the number of replicas you intend to deploy
-#   --expires-at <ISO-8601>         Token expiration time (default: 1 hour from creation)
+#   --expires-at <ISO-8601>         Token expiration time (default: API default)
 #   --auto-approve                  Skip manual approval (default: requires approval)
 #   --site-id <id>                  Site ID to assign to registered agents
 
