@@ -168,6 +168,11 @@ do_post() {
 # ============================================================================
 
 while [[ $# -gt 0 ]]; do
+    if [[ "$1" =~ ^--(api-email|api-token|name|max-usage|expires-at|allowed-private-cidrs|allowed-public-cidrs|site-id|api-root)$ ]]; then
+        if [[ $# -lt 2 || "${2:-}" == --* ]]; then
+            die "Missing value for $1"
+        fi
+    fi
     case "$1" in
         --api-email)
             K_API_EMAIL="$2"
