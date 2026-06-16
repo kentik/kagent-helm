@@ -202,6 +202,8 @@ fi
 # Create Token
 # ============================================================================
 
+API_ROOT="${API_ROOT#https://}"
+API_ROOT="${API_ROOT#http://}"
 URL="https://${API_ROOT}/kagent/v202401/provisioning-tokens"
 BODY=$(build_request_body)
 
