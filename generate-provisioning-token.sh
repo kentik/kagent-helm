@@ -13,8 +13,6 @@
 #   --max-usage <count>             Max agents that can use this token (default: 1)
 #                                   NOTE: must match the number of replicas you intend to deploy
 #   --expires-at <ISO-8601>         Token expiration time (default: 1 hour from creation)
-#   --allowed-private-cidrs <cidrs> Comma-separated private IP CIDRs allowed
-#   --allowed-public-cidrs <cidrs>  Comma-separated public IP CIDRs allowed
 #   --auto-approve                  Skip manual approval (default: requires approval)
 #   --site-id <id>                  Site ID to assign to registered agents
 
@@ -29,8 +27,6 @@ API_ROOT="${K_API_ROOT:-grpc.api.kentik.com}"
 TOKEN_NAME=""
 MAX_USAGE_COUNT=""
 EXPIRES_AT=""
-ALLOWED_PRIVATE_CIDRS=""
-ALLOWED_PUBLIC_CIDRS=""
 REQUIRES_APPROVAL="true"
 SITE_ID=""
 
@@ -54,8 +50,6 @@ Token Configuration:
   --max-usage <count>             Max agents that can use this token (default: 1)
                                   NOTE: must match the number of replicas you intend to deploy
   --expires-at <ISO-8601>         Token expiration time (default: 1h from creation)
-  --allowed-private-cidrs <cidrs> Comma-separated private IP CIDRs allowed
-  --allowed-public-cidrs <cidrs>  Comma-separated public IP CIDRs allowed
   --auto-approve                  Skip manual approval (default: requires approval)
   --site-id <id>                  Site ID to assign to registered agents
 
@@ -69,8 +63,7 @@ Examples:
   $0 --api-root grpc.api.kentik.eu \\
      --api-email user@co.com --api-token abc123 \\
      --name "staging-fleet" \\
-     --max-usage 10 \\
-     --allowed-private-cidrs "10.0.0.0/8,172.16.0.0/12"
+     --max-usage 10
 EOF
     exit "${1:-0}"
 }
@@ -80,13 +73,9 @@ die() {
     exit 1
 }
 
-detect_http_client() {
-    if command -v curl &>/dev/null; then
-        echo "curl"
-    elif command -v wget &>/dev/null; then
-        echo "wget"
-    else
-        die "Neither curl nor wget found. Please install one of them."
+check_curl() {
+    if ! command -v curl &>/dev/null; then
+        die "curl is required but not found. Please install curl."
     fi
 }
 
@@ -109,14 +98,6 @@ build_request_body() {
         body=$(echo "$body" | jq --arg v "$EXPIRES_AT" '. + {expiresAt: $v}')
     fi
 
-    if [[ -n "$ALLOWED_PRIVATE_CIDRS" ]]; then
-        body=$(echo "$body" | jq --arg v "$ALLOWED_PRIVATE_CIDRS" '. + {allowedPrivateCidrs: ($v | split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length>0)))}')
-    fi
-
-    if [[ -n "$ALLOWED_PUBLIC_CIDRS" ]]; then
-        body=$(echo "$body" | jq --arg v "$ALLOWED_PUBLIC_CIDRS" '. + {allowedPublicCidrs: ($v | split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length>0)))}')
-    fi
-
     if [[ "$REQUIRES_APPROVAL" == "true" ]]; then
         body=$(echo "$body" | jq '. + {requiresApproval: true}')
     else
@@ -133,33 +114,18 @@ build_request_body() {
 do_post() {
     local url="$1"
     local body="$2"
-    local http_client
-    http_client=$(detect_http_client)
+    local exit_code=0
 
-    if [[ "$http_client" == "curl" ]]; then
-        curl -s -w "\n%{http_code}" \
-            -X POST \
-            -H "Content-Type: application/json" \
-            -H "X-CH-Auth-Email: $K_API_EMAIL" \
-            -H "X-CH-Auth-API-Token: $K_API_TOKEN" \
-            -d "$body" \
-            "$url" || printf '\n000'
-    else
-        # wget: capture response body + status
-        local tmp_file
-        tmp_file=$(mktemp)
-        local http_code
-        http_code=$(wget -q -O "$tmp_file" \
-            --header="Content-Type: application/json" \
-            --header="X-CH-Auth-Email: $K_API_EMAIL" \
-            --header="X-CH-Auth-API-Token: $K_API_TOKEN" \
-            --post-data="$body" \
-            --server-response \
-            "$url" 2>&1 | awk '/HTTP\//{print $2}' | tail -1 || true)
-        cat "$tmp_file"
-        echo ""
-        echo "${http_code:-000}"
-        rm -f "$tmp_file"
+    curl -s -w "\n%{http_code}" \
+        -X POST \
+        -H "Content-Type: application/json" \
+        -H "X-CH-Auth-Email: $K_API_EMAIL" \
+        -H "X-CH-Auth-API-Token: $K_API_TOKEN" \
+        -d "$body" \
+        "$url" || exit_code=$?
+
+    if [[ $exit_code -ne 0 ]]; then
+        die "curl request failed (exit code $exit_code). Check network connectivity and API host: $url"
     fi
 }
 
@@ -168,7 +134,7 @@ do_post() {
 # ============================================================================
 
 while [[ $# -gt 0 ]]; do
-    if [[ "$1" =~ ^--(api-email|api-token|name|max-usage|expires-at|allowed-private-cidrs|allowed-public-cidrs|site-id|api-root)$ ]]; then
+    if [[ "$1" =~ ^--(api-email|api-token|name|max-usage|expires-at|site-id|api-root)$ ]]; then
         if [[ $# -lt 2 || "${2:-}" == --* ]]; then
             die "Missing value for $1"
         fi
@@ -192,14 +158,6 @@ while [[ $# -gt 0 ]]; do
             ;;
         --expires-at)
             EXPIRES_AT="$2"
-            shift 2
-            ;;
-        --allowed-private-cidrs)
-            ALLOWED_PRIVATE_CIDRS="$2"
-            shift 2
-            ;;
-        --allowed-public-cidrs)
-            ALLOWED_PUBLIC_CIDRS="$2"
             shift 2
             ;;
         --auto-approve)
@@ -227,6 +185,7 @@ done
 # Validate Inputs
 # ============================================================================
 
+check_curl
 check_jq
 
 [[ -z "$K_API_EMAIL" ]] && die "Kentik email is required. Use --api-email or set K_API_EMAIL env var."
