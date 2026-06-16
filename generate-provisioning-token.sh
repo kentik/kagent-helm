@@ -257,7 +257,11 @@ RESPONSE_BODY=$(echo "$RESPONSE" | sed '$d')
 
 if [[ "$HTTP_CODE" -ne 200 ]]; then
     echo "API request failed (HTTP $HTTP_CODE):" >&2
-    echo "$RESPONSE_BODY" | jq . 2>/dev/null || echo "$RESPONSE_BODY" >&2
+    if echo "$RESPONSE_BODY" | jq . >/dev/null 2>&1; then
+        echo "$RESPONSE_BODY" | jq . >&2
+    else
+        echo "$RESPONSE_BODY" >&2
+    fi
     exit 1
 fi
 
