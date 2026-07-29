@@ -24,3 +24,10 @@ tests:
     asserts:
       - hasDocuments:
           count: 0
+
+  - it: should fail when service.enabled but no capabilities enabled
+    set:
+      service.enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "service.enabled is true but no capability ports are enabled. Enable at least one of: flowProxy, snmpTrap, syslog, bgp, synthetics, healthCheck"

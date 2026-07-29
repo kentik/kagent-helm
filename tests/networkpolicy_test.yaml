@@ -1,0 +1,191 @@
+suite: NetworkPolicy tests
+templates:
+  - networkpolicy.yaml
+set:
+  kagent.companyId: "12345"
+  kagent.provisioningToken: "test-token"
+
+tests:
+  - it: should not render NetworkPolicy when disabled (default)
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render egress-only NetworkPolicy when no service ports
+    set:
+      networkPolicy.enabled: true
+    asserts:
+      - isKind:
+          of: NetworkPolicy
+      - contains:
+          path: spec.policyTypes
+          content: Egress
+      - notContains:
+          path: spec.policyTypes
+          content: Ingress
+
+  - it: should add Ingress policyType when service ports enabled
+    set:
+      networkPolicy.enabled: true
+      service.flowProxy.enabled: true
+    asserts:
+      - contains:
+          path: spec.policyTypes
+          content: Ingress
+      - contains:
+          path: spec.policyTypes
+          content: Egress
+
+  - it: should include flow proxy in ingress rules
+    set:
+      networkPolicy.enabled: true
+      service.flowProxy.enabled: true
+    asserts:
+      - contains:
+          path: spec.ingress[0].ports
+          content:
+            protocol: UDP
+            port: 9995
+
+  - it: should include multiple capability ports in ingress
+    set:
+      networkPolicy.enabled: true
+      service.flowProxy.enabled: true
+      service.bgp.enabled: true
+      service.snmpTrap.enabled: true
+    asserts:
+      - contains:
+          path: spec.ingress[0].ports
+          content:
+            protocol: UDP
+            port: 9995
+      - contains:
+          path: spec.ingress[0].ports
+          content:
+            protocol: TCP
+            port: 179
+      - contains:
+          path: spec.ingress[0].ports
+          content:
+            protocol: UDP
+            port: 162
+
+  - it: should add synthetics egress rule when synthetics enabled
+    set:
+      networkPolicy.enabled: true
+      service.synthetics.enabled: true
+    asserts:
+      - contains:
+          path: spec.egress
+          content:
+            ports:
+            - protocol: TCP
+              port: 8877
+
+  - it: should not add synthetics egress when synthetics disabled
+    set:
+      networkPolicy.enabled: true
+      service.flowProxy.enabled: true
+    asserts:
+      - notContains:
+          path: spec.egress
+          content:
+            ports:
+            - protocol: TCP
+              port: 8877
+
+  - it: should add Ingress and probe port when probes enabled without service
+    set:
+      networkPolicy.enabled: true
+      livenessProbe:
+        enabled: true
+        httpGet:
+          path: /hc
+          port: 8099
+    asserts:
+      - contains:
+          path: spec.policyTypes
+          content: Ingress
+      - contains:
+          path: spec.ingress[0].ports
+          content:
+            protocol: TCP
+            port: 8099
+
+  - it: should include probe port alongside service ports
+    set:
+      networkPolicy.enabled: true
+      service.flowProxy.enabled: true
+      readinessProbe:
+        enabled: true
+        httpGet:
+          path: /hc
+          port: 8099
+    asserts:
+      - contains:
+          path: spec.ingress[0].ports
+          content:
+            protocol: UDP
+            port: 9995
+      - contains:
+          path: spec.ingress[0].ports
+          content:
+            protocol: TCP
+            port: 8099
+
+  - it: should handle empty egress list without error
+    set:
+      networkPolicy.enabled: true
+      networkPolicy.egress: []
+      service.flowProxy.enabled: true
+    asserts:
+      - isKind:
+          of: NetworkPolicy
+
+  - it: should handle empty egress with synthetics auto-egress
+    set:
+      networkPolicy.enabled: true
+      networkPolicy.egress: []
+      service.synthetics.enabled: true
+    asserts:
+      - contains:
+          path: spec.egress
+          content:
+            ports:
+            - protocol: TCP
+              port: 8877
+
+  - it: should render ingressFrom when set
+    set:
+      networkPolicy.enabled: true
+      networkPolicy.ingressFrom:
+        - ipBlock:
+            cidr: 10.0.0.0/8
+      service.flowProxy.enabled: true
+    asserts:
+      - contains:
+          path: spec.ingress[0].from
+          content:
+            ipBlock:
+              cidr: 10.0.0.0/8
+
+  - it: should not render from selector when ingressFrom is not set
+    set:
+      networkPolicy.enabled: true
+      service.flowProxy.enabled: true
+    asserts:
+      - isNull:
+          path: spec.ingress[0].from
+
+  - it: should use targetPort in ingress rules when set
+    set:
+      networkPolicy.enabled: true
+      service.flowProxy.enabled: true
+      service.flowProxy.port: 9995
+      service.flowProxy.targetPort: 19995
+    asserts:
+      - contains:
+          path: spec.ingress[0].ports
+          content:
+            protocol: UDP
+            port: 19995

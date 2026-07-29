@@ -1,0 +1,100 @@
+{{- if .Values.service.enabled }}
+{{- $supportsNodePort := or (eq (.Values.service.type | default "ClusterIP") "NodePort") (eq (.Values.service.type | default "ClusterIP") "LoadBalancer") }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "kagent.fullname" . }}
+  labels:
+    {{- include "kagent.labels" . | nindent 4 }}
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.type | default "ClusterIP" }}
+  {{- with .Values.service.externalTrafficPolicy }}
+  externalTrafficPolicy: {{ . }}
+  {{- end }}
+  {{- with .Values.service.ipFamilyPolicy }}
+  ipFamilyPolicy: {{ . }}
+  {{- end }}
+  {{- with .Values.service.ipFamilies }}
+  ipFamilies:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.service.sessionAffinity }}
+  sessionAffinity: {{ . }}
+  {{- end }}
+  {{- with .Values.service.sessionAffinityConfig }}
+  sessionAffinityConfig:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.service.loadBalancerSourceRanges }}
+  loadBalancerSourceRanges:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  selector:
+    {{- include "kagent.selectorLabels" . | nindent 4 }}
+  ports:
+  {{- if .Values.service.flowProxy.enabled }}
+  - name: flow-proxy
+    port: {{ .Values.service.flowProxy.port | default 9995 }}
+    targetPort: {{ .Values.service.flowProxy.targetPort | default (.Values.service.flowProxy.port | default 9995) }}
+    protocol: {{ .Values.service.flowProxy.protocol | default "UDP" }}
+    {{- if and $supportsNodePort .Values.service.flowProxy.nodePort }}
+    nodePort: {{ .Values.service.flowProxy.nodePort }}
+    {{- end }}
+  {{- end }}
+  {{- if .Values.service.snmpTrap.enabled }}
+  - name: snmp-trap
+    port: {{ .Values.service.snmpTrap.port | default 162 }}
+    targetPort: {{ .Values.service.snmpTrap.targetPort | default (.Values.service.snmpTrap.port | default 162) }}
+    protocol: {{ .Values.service.snmpTrap.protocol | default "UDP" }}
+    {{- if and $supportsNodePort .Values.service.snmpTrap.nodePort }}
+    nodePort: {{ .Values.service.snmpTrap.nodePort }}
+    {{- end }}
+  {{- end }}
+  {{- if .Values.service.syslog.enabled }}
+  {{- $syslogPort := .Values.service.syslog.port | default 514 }}
+  {{- $syslogTargetPort := .Values.service.syslog.targetPort | default $syslogPort }}
+  {{- $protocols := .Values.service.syslog.protocols | default (list "UDP" "TCP") }}
+  {{- range $i, $proto := $protocols }}
+  - name: syslog-{{ lower $proto }}
+    port: {{ $syslogPort }}
+    targetPort: {{ $syslogTargetPort }}
+    protocol: {{ $proto }}
+    {{- if and $supportsNodePort $.Values.service.syslog.nodePorts }}
+    {{- if gt (len $.Values.service.syslog.nodePorts) $i }}
+    nodePort: {{ index $.Values.service.syslog.nodePorts $i }}
+    {{- end }}
+    {{- end }}
+  {{- end }}
+  {{- end }}
+  {{- if .Values.service.bgp.enabled }}
+  - name: bgp
+    port: {{ .Values.service.bgp.port | default 179 }}
+    targetPort: {{ .Values.service.bgp.targetPort | default (.Values.service.bgp.port | default 179) }}
+    protocol: {{ .Values.service.bgp.protocol | default "TCP" }}
+    {{- if and $supportsNodePort .Values.service.bgp.nodePort }}
+    nodePort: {{ .Values.service.bgp.nodePort }}
+    {{- end }}
+  {{- end }}
+  {{- if .Values.service.synthetics.enabled }}
+  - name: synthetics
+    port: {{ .Values.service.synthetics.port | default 9977 }}
+    targetPort: {{ .Values.service.synthetics.targetPort | default (.Values.service.synthetics.port | default 9977) }}
+    protocol: {{ .Values.service.synthetics.protocol | default "UDP" }}
+    {{- if and $supportsNodePort .Values.service.synthetics.nodePort }}
+    nodePort: {{ .Values.service.synthetics.nodePort }}
+    {{- end }}
+  {{- end }}
+  {{- if .Values.service.healthCheck.enabled }}
+  - name: health-check
+    port: {{ .Values.service.healthCheck.port | default 8099 }}
+    targetPort: {{ .Values.service.healthCheck.targetPort | default (.Values.service.healthCheck.port | default 8099) }}
+    protocol: {{ .Values.service.healthCheck.protocol | default "TCP" }}
+    {{- if and $supportsNodePort .Values.service.healthCheck.nodePort }}
+    nodePort: {{ .Values.service.healthCheck.nodePort }}
+    {{- end }}
+  {{- end }}
+{{- end }}

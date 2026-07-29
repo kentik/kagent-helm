@@ -1,0 +1,30 @@
+suite: Headless Service tests
+templates:
+  - headless-service.yaml
+set:
+  kagent.companyId: "12345"
+  kagent.provisioningToken: "test-token"
+
+tests:
+  - it: should render headless service for statefulset
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: spec.type
+          value: ClusterIP
+      - equal:
+          path: spec.clusterIP
+          value: None
+      - matchRegex:
+          path: metadata.name
+          pattern: -headless$
+
+  - it: should not render headless service for daemonset
+    set:
+      deploymentType: daemonset
+      persistence.type: hostPath
+      persistence.keypair.type: hostPath
+    asserts:
+      - hasDocuments:
+          count: 0

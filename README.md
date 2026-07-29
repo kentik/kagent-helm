@@ -1,926 +1,275 @@
 # Kagent Helm Chart
 
-A Helm chart for deploying Kentik Universal Agent (kagent) with support for multiple deployment patterns: StatefulSet and DaemonSet.
+Deploy the [Kentik Universal Agent](https://www.kentik.com) (kagent) on Kubernetes. Supports StatefulSet and DaemonSet patterns with per-capability service port configuration.
 
 ## Prerequisites
 
 - Kubernetes 1.20+
 - Helm 3.x
-- Kentik account with API access
-- A provisioning token (if you cloned this repo, see `./generate-provisioning-token.sh --help`)
+- Kentik account with a provisioning token (see `./generate-provisioning-token.sh --help`)
 
 ## Quick Start
 
-### 1. Install the Chart
-
 ```bash
-# Clone the repository
+# Clone the chart
 git clone https://github.com/kentik/kagent-helm.git
 cd kagent-helm
 
-# Install with StatefulSet pattern (persistent storage)
+# Install with default StatefulSet pattern
 helm install kagent . \
   --set-string kagent.companyId=YOUR_COMPANY_ID \
   --set-string kagent.provisioningToken=YOUR_PROVISIONING_TOKEN
 ```
 
-Alternatively, install directly from the GitHub repository without cloning:
+Or install directly from the OCI registry without cloning:
 
 ```bash
-# Install with StatefulSet pattern
 helm install kagent oci://ghcr.io/kentik/kagent-helm \
   --set-string kagent.companyId=YOUR_COMPANY_ID \
   --set-string kagent.provisioningToken=YOUR_PROVISIONING_TOKEN
+```
 
-# Or from a specific version/tag
-helm install kagent https://github.com/kentik/kagent-helm/archive/refs/heads/main.tar.gz \
+Then authorize the agent in the Kentik Portal under Settings → Universal Agents.
+
+## Exposing Capability Ports
+
+The Universal Agent runs multiple capabilities, each listening on specific ports. Enable only what you need:
+
+```yaml
+# values-flow-and-syslog.yaml
+service:
+  enabled: true
+  type: LoadBalancer
+
+  flowProxy:
+    enabled: true # UDP 9995 - NetFlow/sFlow/IPFIX
+
+  syslog:
+    enabled: true # UDP+TCP 514
+
+
+  # Other capabilities (disabled by default):
+  # snmpTrap:         # UDP 162
+  # healthCheck:      # TCP 8099
+
+  # Unreleased capabilities (coming soon):
+  # bgp:              # TCP 179
+  # synthetics:       # UDP 9977 (inbound mesh probes)
+```
+
+```bash
+helm install kagent . -f values-flow-and-syslog.yaml \
   --set-string kagent.companyId=YOUR_COMPANY_ID \
   --set-string kagent.provisioningToken=YOUR_PROVISIONING_TOKEN
 ```
 
-### 2. Verify Installation
+### Available Service Ports
 
-```bash
-# Check deployment status
-kubectl get pods -l app.kubernetes.io/name=kagent
+| Capability    | Port | Protocol | Direction | Description                                    |
+| ------------- | ---- | -------- | --------- | ---------------------------------------------- |
+| `flowProxy`   | 9995 | UDP      | Inbound   | NetFlow/sFlow/IPFIX from routers/switches      |
+| `snmpTrap`    | 162  | UDP      | Inbound   | SNMP traps from network devices                |
+| `syslog`      | 514  | UDP+TCP  | Inbound   | Syslog messages from network devices           |
+| `bgp`         | 179  | TCP      | Inbound   | BGP peering sessions from routers (unreleased) |
+| `synthetics`  | 9977 | UDP      | Inbound   | Agent-to-agent mesh test probes (unreleased)   |
+| `healthCheck` | 8099 | TCP      | Inbound   | Health check endpoint                          |
 
-# View logs
-kubectl logs -l app.kubernetes.io/name=kagent --tail=100
-```
+Capabilities that only use outbound connections (DNS OTT Tap, SNMP/Streaming Telemetry polling via ranger, NMS/SSH, synthetics TCP 8877) do not need service ports. These are handled via NetworkPolicy egress rules.
 
-### 3. Authorize agent via UI
-- Go to Kentik Portal → Settings → Universal Agents
-- Find your new agent in the "Pending Authorization" section
-- Click "Authorize" to approve the agent
+### Port Customization
 
-## Deployment Patterns
-
-
-### StatefulSet (Persistent Storage)
-
-**Use Case**: Standard deployments requiring persistent storage for flow data buffers or agent state.
-
-**Characteristics**:
-- Ordered pod naming (kagent-0, kagent-1, ...)
-- Persistent volumes for data and keypair
-- Stable identity across pod restarts
-- Ordered rolling updates
-
-**Important**: The agent's ed25519 keypair is stored in `/opt/ua/keys/` and **MUST** persist across pod restarts as it's the agent's unique identity.
-
-**Data Persistence**:
-The StatefulSet creates two persistent volumes per pod:
-- `/data` (10Gi default): Application data, buffers, logs, temp files
-- `/opt/ua/keys` (100Mi): ed25519 keypair (agent identity)
-
-**Scaling**:
-
-Before scaling, you need to ensure that the secret with agent's identity includes keypairs for each additional agent (if scaling up). Then you can run a regular scale command:
-
-```bash
-# Scale StatefulSet
-kubectl scale statefulset kagent --replicas=3
-```
-
-**Cleanup**: PVCs are NOT deleted automatically on uninstall:
-```bash
-# Delete the release
-helm uninstall kagent
-
-# Manually clean up PVCs
-kubectl delete pvc -l app.kubernetes.io/name=kagent
-```
-
-### DaemonSet (Node-Level)
-
-**Use Case**: Node-level network monitoring, SNMP polling of node interfaces, or collecting node-specific metrics.
-
-**Characteristics**:
-- Exactly one pod per Kubernetes node
-- Automatic pod scheduling on node add/remove
-- Tolerations for control-plane nodes included
-- Lower resource requests per pod
-
-**Storage**:
-DaemonSet deployments only support `hostPath` for persistent storage (not PVC). Set `persistence.type: hostPath` when using DaemonSet.
-
-Check [examples/daemon-set.yaml](examples/daemon-set.yaml) to get started.
-
-**hostPath Permissions**:
-The hostPath directories on each node must be readable and writable by user ID 500 (the default `runAsUser`). Create and set permissions before deploying:
-
-```bash
-# On each node, create directories with correct ownership
-sudo mkdir -p /var/lib/kagent/data /var/lib/kagent/keys
-sudo chown -R 500:500 /var/lib/kagent
-```
-
-**Node Coverage**:
-```bash
-# Verify one pod per node
-kubectl get nodes --no-headers | wc -l
-kubectl get pods -l app.kubernetes.io/name=kagent --no-headers | wc -l
-# These numbers should match
-
-# View pods with node assignment
-kubectl get pods -l app.kubernetes.io/name=kagent -o wide
-```
-
-## Configuration
-
-### Kagent Settings
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `kagent.companyId` | Company ID for agent registration (REQUIRED) | `""` |
-| `kagent.provisioningToken` | Provisioning token for agent registration (REQUIRED; stored in a Kubernetes Secret and injected via `secretKeyRef`) | `""` |
-| `kagent.agentId` | Agent ID for Terraform tracking | `""` |
-| `kagent.releaseChannel` | Release channel (stable, beta, dev) | `stable` |
-| `kagent.diskReservation.enabled` | Enable disk space reservation | `true` |
-| `kagent.diskReservation.initialSize` | Initial reserved disk space | `200MB` |
-| `kagent.logDest` | Log destination (stdout, stderr, discard, filename) | `stdout` |
-| `kagent.logLevel` | Log level (debug, info, warn, error) | `info` |
-| `kagent.apiEndpoint` | Kentik API endpoint | `grpc.api.kentik.com:443` |
-
-### Deployment Configuration
-
-| Parameter | Description | Default         |
-|-----------|-------------|-----------------|
-| `deploymentType` | Pattern: statefulset, daemonset | `statefulset`   |
-| `replicaCount` | Number of replicas (StatefulSet only) | `1`             |
-| `image.repository` | Kagent container image | `kentik/kagent` |
-| `image.tag` | Image tag | `v5.0.1`        |
-| `image.pullPolicy` | Image pull policy | `IfNotPresent`  |
-
-### Persistence
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `persistence.enabled` | Enable persistent storage | `true` |
-| `persistence.type` | Volume type: `pvc`, `hostPath`, `emptyDir` | `pvc` |
-| `persistence.pvc.storageClass` | Storage class (empty = cluster default) | `""` |
-| `persistence.pvc.size` | Data volume size | `10Gi` |
-| `persistence.pvc.accessModes` | PVC access modes | `[ReadWriteOnce]` |
-| `persistence.hostPath.path` | Host path for data (DaemonSet) | `/var/lib/kagent/data` |
-| `persistence.hostPath.type` | HostPath volume type | `DirectoryOrCreate` |
-| `persistence.keypair.enabled` | Separate volume for keypair | `true` |
-| `persistence.keypair.type` | Keypair storage: `secret`, `pvc`, `hostPath`, `emptyDir` | `secret` |
-| `persistence.keypair.pvc.storageClass` | Storage class for keypair PVC | `""` |
-| `persistence.keypair.pvc.size` | Keypair volume size (when using PVC) | `100Mi` |
-| `persistence.keypair.pvc.accessModes` | Keypair PVC access modes | `[ReadWriteOnce]` |
-| `persistence.keypair.hostPath.path` | Host path for keypair (DaemonSet) | `/var/lib/kagent/keys` |
-| `persistence.keypair.hostPath.type` | Keypair hostPath volume type | `DirectoryOrCreate` |
-| `persistence.keypair.secret.name` | Secret name pattern (empty = auto-generated) | `""` |
-
-### Resources
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `resources.requests.cpu` | CPU request | `100m` (50m for DaemonSet) |
-| `resources.requests.memory` | Memory request | `128Mi` (64Mi for DaemonSet) |
-| `resources.limits.cpu` | CPU limit | `500m` (200m for DaemonSet) |
-| `resources.limits.memory` | Memory limit | `512Mi` (256Mi for DaemonSet) |
-
-### Security
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `podSecurityContext.runAsNonRoot` | Run as non-root user | `true` |
-| `podSecurityContext.runAsUser` | User ID | `500` |
-| `podSecurityContext.fsGroup` | File system group | `500` |
-| `serviceAccount.create` | Create service account | `true` |
-| `rbac.create` | Create RBAC resources | `false` |
-| `networkPolicy.enabled` | Enable network policy | `false` |
-
-## Cloud-Specific Examples
-
-### AWS (EKS)
+Override default port numbers or pin NodePort values:
 
 ```yaml
-# statefulset-aws-gp3.yaml
-deploymentType: statefulset
-persistence:
-  pvc:
-    storageClass: "gp3"
-  keypair:
-    pvc:
-      storageClass: "gp3"
+service:
+  enabled: true
+  type: NodePort
+  flowProxy:
+    enabled: true
+    port: 2055 # Listen on 2055 instead of 9995
+    nodePort: 30055 # Pin a specific node port
 ```
 
-### Azure (AKS)
+### NetworkPolicy Integration
 
-```yaml
-# statefulset-azure-premium.yaml
-deploymentType: statefulset
-persistence:
-  pvc:
-    storageClass: "managed-premium"
-  keypair:
-    pvc:
-      storageClass: "managed-premium"
-```
+When `networkPolicy.enabled: true`, ingress and egress rules are managed automatically:
 
-### Google Cloud (GKE)
-
-```yaml
-# statefulset-gcp-standard.yaml
-deploymentType: statefulset
-persistence:
-  pvc:
-    storageClass: "standard-rwo"
-  keypair:
-    pvc:
-      storageClass: "standard-rwo"
-```
-
-## Migration Between Patterns
-
-**IMPORTANT**: Switching between deployment patterns (e.g., DaemonSet → StatefulSet) requires a **clean uninstall and fresh install**. In-place upgrades between patterns are NOT supported due to Kubernetes resource type immutability.
-
-```bash
-# Uninstall existing release
-helm uninstall kagent
-
-# Clean up PVCs if switching from StatefulSet
-kubectl delete pvc -l app.kubernetes.io/name=kagent
-
-# Install with new pattern
-helm install kagent . --set deploymentType=statefulset
-```
-
-## Troubleshooting
-
-### Agent Not Connecting
-
-1. **Check provisioning token**:
-```bash
-kubectl get secret kagent-secret -o jsonpath='{.data.K_REGISTER_PROVISIONING_TOKEN}' | base64 -d
-```
-
-2. **View agent logs**:
-```bash
-kubectl logs -l app.kubernetes.io/name=kagent --tail=100
-```
-
-3. **Verify network connectivity**:
-```bash
-kubectl exec -it <pod-name> -- ping grpc.api.kentik.com
-```
-
-### StatefulSet PVC Issues
-
-1. **Check PVC status**:
-```bash
-kubectl get pvc -l app.kubernetes.io/name=kagent
-```
-
-2. **Verify storage class exists**:
-```bash
-kubectl get storageclass
-```
-
-3. **Check pod volume mounts**:
-```bash
-kubectl exec -it kagent-0 -- ls -la /data
-kubectl exec -it kagent-0 -- ls -la /opt/ua/keys
-```
-
-### Keypair Persistence Issues
-
-**Problem**: Agent creates new identity after pod restart, or pod fails to start with keypair errors.
-
-#### Using Secret-Based Storage
-
-1. **Verify secrets exist and have correct names**:
-```bash
-# List all kagent secrets
-kubectl get secrets | grep kagent
-
-# Should show: kagent-0-secret, kagent-1-secret, etc.
-# Verify secret content
-kubectl get secret kagent-0-secret -o yaml
-
-# Check that it has the required keys
-kubectl get secret kagent-0-secret -o jsonpath='{.data}' | jq 'keys'
-# Should output: ["private_key.pem", "public_key.pem"]
-```
-
-2. **Verify secret content is valid**:
-```bash
-# Decode and check private key format
-kubectl get secret kagent-0-secret -o jsonpath='{.data.private_key\.pem}' | base64 -d
-# Should start with: -----BEGIN PRIVATE KEY-----
-
-# Decode and check public key format
-kubectl get secret kagent-0-secret -o jsonpath='{.data.public_key\.pem}' | base64 -d
-# Should start with: -----BEGIN PUBLIC KEY-----
-```
-
-3. **Check pod init container logs** (when using secret type):
-```bash
-# View init container logs
-kubectl logs kagent-0 -c setup-keypair
-
-# Should show: "Keypair for pod-0 copied successfully"
-# If you see "Warning: No keypair found", the secret name is incorrect
-```
-
-4. **Verify keypair was mounted correctly**:
-```bash
-# Check if keys exist in the container
-kubectl exec -it kagent-0 -- ls -la /opt/ua/keys/
-# Should show: private_key.pem, public_key.pem
-
-# Verify permissions
-kubectl exec -it kagent-0 -- stat /opt/ua/keys/private_key.pem
-# Should show mode: 0400 (read-only)
-```
-
-#### Using PVC-Based Storage
-
-1. **Check PVC status**:
-```bash
-# List keypair PVCs
-kubectl get pvc | grep keys
-
-# Verify PVC is bound
-kubectl get pvc keys-kagent-0
-# Status should be "Bound"
-```
-
-2. **Verify mount inside pod**:
-```bash
-kubectl exec -it kagent-0 -- ls -la /opt/ua/keys/
-# Should show: agent.key (private key), agent.pub (public key)
-```
-
-3. **Check if keys persist across restarts**:
-```bash
-# Note the key fingerprint
-kubectl exec -it kagent-0 -- cat /opt/ua/keys/agent.pub
-
-# Delete the pod (StatefulSet will recreate it)
-kubectl delete pod kagent-0
-
-# Wait for pod to restart
-kubectl wait --for=condition=Ready pod/kagent-0 --timeout=60s
-
-# Verify the same key exists
-kubectl exec -it kagent-0 -- cat /opt/ua/keys/agent.pub
-# Should match the previous fingerprint
-```
-
-#### Common Issues
-
-**Issue**: `Error: secret "kagent-0-secret" not found`
-- **Cause**: Secrets not created before helm install
-- **Solution**: Create secrets first (see [Generating Keypairs](#option-1-generating-keypairs-with-helper-script))
-
-**Issue**: `Warning: No keypair found for pod-X`
-- **Cause**: Secret name doesn't match expected pattern
-- **Solution**: Ensure secret name is `{{ .Release.Name }}-{{ replica-index }}-secret`
-
-**Issue**: Pod stuck in `Init:Error` state
-- **Cause**: Invalid secret content or missing keys
-- **Solution**: Verify secret has both `private_key.pem` and `public_key.pem` keys with valid PEM content
-
-**Issue**: Agent shows "Keypair validation failed"
-- **Cause**: Corrupted or invalid keypair format
-- **Solution**: Regenerate keypair using `generate-secrets.sh` or verify external secret manager integration
-
-### DaemonSet Not on All Nodes
-
-1. **Check node taints**:
-```bash
-kubectl get nodes -o json | jq '.items[].spec.taints'
-```
-
-2. **Verify tolerations are applied**:
-```bash
-kubectl get daemonset kagent -o yaml | grep -A 10 tolerations
-```
-
-3. **Check node selectors**:
-```bash
-# If you have node selectors, ensure nodes have matching labels
-kubectl get nodes --show-labels
-```
-
-## Advanced Configuration
-
-### Keypair Management
-
-The agent's ed25519 keypair serves as its unique identity in the Kentik platform. **This keypair MUST persist across pod restarts** to maintain the agent's identity and prevent orphaned agents.
-
-#### Storage Options
-
-The chart supports four keypair storage types via `persistence.keypair.type`:
-
-1. **`secret`** (Default, Recommended): Kubernetes Secrets - best for production, GitOps, and external secret managers
-2. **`pvc`**: PersistentVolumeClaim - traditional persistent storage approach
-3. **`hostPath`**: Node-local storage - useful for DaemonSet deployments
-4. **`emptyDir`**: Temporary storage - **NOT recommended for production** (keypair lost on pod restart)
-
-#### Secret-Based Keypair Storage (Recommended)
-
-Secret-based storage (`persistence.keypair.type: secret`) provides several advantages:
-
-- **Production-ready**: Integrates with external secret managers (Vault, AWS Secrets Manager, etc.)
-- **GitOps-friendly**: Works with Sealed Secrets, SOPS, or other encryption tools
-- **Easy key rotation**: Update secrets centrally and restart pods to pick up new keys
-- **Stateless-compatible**: Works with all deployment patterns (StatefulSet, DaemonSet, Deployment)
-
-##### Secret Naming Convention
-
-Each replica requires its own secret following this naming pattern:
-```
-{{ .Release.Name }}-{{ replica-index }}-secret
-```
-
-Examples:
-- Replica 0: `kagent-0-secret`
-- Replica 1: `kagent-1-secret`
-- Replica 2: `kagent-2-secret`
-
-Each secret must contain exactly two keys:
-- `private_key.pem`: Ed25519 private key (PEM format)
-- `public_key.pem`: Ed25519 public key (PEM format)
-
-##### Option 1: Generating Keypairs with Helper Script
-
-Use the provided `generate-secrets.sh` script to quickly create ed25519 keypairs:
-
-```bash
-# Generate secrets for 3 replicas
-./generate-secrets.sh 3
-
-# This creates:
-# - generated_secrets/generated_secrets.yaml (Kubernetes secret manifest)
-# - generated_secrets/private_key_*.pem (individual keypair files for backup)
-# - generated_secrets/public_key_*.pem (individual public keys for backup)
-
-# Apply the secrets before installing the chart
-kubectl apply -f generated_secrets/generated_secrets.yaml
-
-# Install kagent (it will automatically use the pre-created secrets)
-helm install kagent . \
-  --set deploymentType=statefulset \
-  --set replicaCount=3
-
-# For custom release name
-RELEASE_NAME=my-kagent ./generate-secrets.sh 3
-kubectl apply -f generated_secrets/generated_secrets.yaml
-helm install my-kagent . --set replicaCount=3
-```
-
-**Important**: Keep the generated PEM files in `generated_secrets/` directory as backups. Store them securely (e.g., password-protected archive, secret management system).
-
-#### Using PVC for Keypair Storage
-
-If you prefer PersistentVolumeClaims for keypairs instead of secrets:
-
-```bash
-# StatefulSet with PVC-based keypair storage
-helm install kagent . \
-  --set deploymentType=statefulset \
-  --set persistence.keypair.type=pvc
-```
-
-#### Using hostPath for Keypair Storage (DaemonSet)
-
-For DaemonSet deployments with node-local keypair storage:
-
-```bash
-# DaemonSet pattern with hostPath keypairs
-helm install kagent . \
-  --set deploymentType=daemonset \
-  --set persistence.keypair.enabled=true \
-  --set persistence.keypair.type=hostPath \
-  --set persistence.keypair.hostPath.path=/var/lib/kagent/keys
-```
-
-##### Option 2: Integration with External Secret Managers
-
-For production environments, integrate with external secret managers to avoid storing sensitive keypairs in Git:
-
-###### External Secrets Operator (ESO)
-
-[External Secrets Operator](https://external-secrets.io/) syncs secrets from external providers to Kubernetes Secrets.
-
-**Prerequisites**:
-1. Install External Secrets Operator in your cluster
-2. Configure a SecretStore for your provider
-
-**AWS Secrets Manager Example**:
-
-```bash
-# 1. Store keypairs in AWS Secrets Manager (do this for each replica)
-aws secretsmanager create-secret \
-  --name kagent/keypairs/replica-0 \
-  --description "Kagent replica 0 ed25519 keypair" \
-  --secret-string "{\"private_key\":\"$(cat generated_secrets/private_key_0.pem)\",\"public_key\":\"$(cat generated_secrets/public_key_0.pem)\"}"
-
-# Repeat for replica-1, replica-2, etc.
-```
-
-Create ExternalSecret resources:
-
-```yaml
-# external-secrets.yaml
----
-apiVersion: external-secrets.io/v1beta1
-kind: ExternalSecret
-metadata:
-  name: kagent-0-keypair
-  namespace: default
-spec:
-  refreshInterval: 1h
-  secretStoreRef:
-    name: aws-secrets-manager
-    kind: SecretStore
-  target:
-    name: kagent-0-secret
-    creationPolicy: Owner
-  data:
-  - secretKey: private_key.pem
-    remoteRef:
-      key: kagent/keypairs/replica-0
-      property: private_key
-  - secretKey: public_key.pem
-    remoteRef:
-      key: kagent/keypairs/replica-0
-      property: public_key
----
-apiVersion: external-secrets.io/v1beta1
-kind: ExternalSecret
-metadata:
-  name: kagent-1-keypair
-  namespace: default
-spec:
-  refreshInterval: 1h
-  secretStoreRef:
-    name: aws-secrets-manager
-    kind: SecretStore
-  target:
-    name: kagent-1-secret
-    creationPolicy: Owner
-  data:
-  - secretKey: private_key.pem
-    remoteRef:
-      key: kagent/keypairs/replica-1
-      property: private_key
-  - secretKey: public_key.pem
-    remoteRef:
-      key: kagent/keypairs/replica-1
-      property: public_key
----
-# Repeat for each replica...
-```
-
-Deploy and install:
-```bash
-# Apply ExternalSecret resources (creates the kubernetes secrets)
-kubectl apply -f external-secrets.yaml
-
-# Wait for secrets to be created
-kubectl wait --for=condition=Ready externalsecret/kagent-0-keypair --timeout=60s
-
-# Install kagent
-helm install kagent . \
-  --set deploymentType=statefulset \
-  --set replicaCount=2 \
-  --set persistence.keypair.type=secret
-```
-
-**Google Cloud Secret Manager Example**:
-
-```bash
-# 1. Store in GCP Secret Manager
-gcloud secrets create kagent-replica-0-private \
-  --data-file=generated_secrets/private_key_0.pem
-
-gcloud secrets create kagent-replica-0-public \
-  --data-file=generated_secrets/public_key_0.pem
-
-# 2. Create ExternalSecret
-cat <<EOF | kubectl apply -f -
-apiVersion: external-secrets.io/v1beta1
-kind: ExternalSecret
-metadata:
-  name: kagent-0-keypair
-spec:
-  refreshInterval: 1h
-  secretStoreRef:
-    name: gcpsm-secret-store
-    kind: SecretStore
-  target:
-    name: kagent-0-secret
-  data:
-  - secretKey: private_key.pem
-    remoteRef:
-      key: kagent-replica-0-private
-  - secretKey: public_key.pem
-    remoteRef:
-      key: kagent-replica-0-public
-EOF
-```
-
-**Azure Key Vault Example**:
-
-```bash
-# 1. Store in Azure Key Vault
-az keyvault secret set \
-  --vault-name my-keyvault \
-  --name kagent-replica-0-private \
-  --file generated_secrets/private_key_0.pem
-
-az keyvault secret set \
-  --vault-name my-keyvault \
-  --name kagent-replica-0-public \
-  --file generated_secrets/public_key_0.pem
-
-# 2. Create ExternalSecret
-cat <<EOF | kubectl apply -f -
-apiVersion: external-secrets.io/v1beta1
-kind: ExternalSecret
-metadata:
-  name: kagent-0-keypair
-spec:
-  refreshInterval: 1h
-  secretStoreRef:
-    name: azure-keyvault
-    kind: SecretStore
-  target:
-    name: kagent-0-secret
-  data:
-  - secretKey: private_key.pem
-    remoteRef:
-      key: kagent-replica-0-private
-  - secretKey: public_key.pem
-    remoteRef:
-      key: kagent-replica-0-public
-EOF
-```
-
-###### HashiCorp Vault
-
-Use the [Vault Secrets Operator](https://github.com/hashicorp/vault-secrets-operator) or [vault-csi-provider](https://github.com/hashicorp/vault-csi-provider):
-
-**Vault KV Secrets Example**:
-
-```bash
-# 1. Store keypairs in Vault KV store
-vault kv put secret/kagent/replica-0 \
-  private_key="$(cat generated_secrets/private_key_0.pem)" \
-  public_key="$(cat generated_secrets/public_key_0.pem)"
-
-# 2. Create VaultStaticSecret (using Vault Secrets Operator)
-cat <<EOF | kubectl apply -f -
-apiVersion: secrets.hashicorp.com/v1beta1
-kind: VaultStaticSecret
-metadata:
-  name: kagent-0-keypair
-spec:
-  vaultAuthRef: vault-auth
-  mount: secret
-  path: kagent/replica-0
-  refreshAfter: 1h
-  destination:
-    name: kagent-0-secret
-    create: true
-    transformation:
-      templates:
-        private_key.pem:
-          text: "{{ .Secrets.private_key }}"
-        public_key.pem:
-          text: "{{ .Secrets.public_key }}"
-EOF
-```
-
-###### Sealed Secrets (GitOps)
-
-Use [Sealed Secrets](https://github.com/bitnami-labs/sealed-secrets) to encrypt secrets for safe Git storage:
-
-```bash
-# 1. Generate keypairs using the helper script
-./generate-secrets.sh 3
-
-# 2. Create individual secrets and seal them
-for i in 0 1 2; do
-  kubectl create secret generic kagent-${i}-secret \
-    --from-file=private_key.pem=generated_secrets/private_key_${i}.pem \
-    --from-file=public_key.pem=generated_secrets/public_key_${i}.pem \
-    --dry-run=client -o yaml | \
-  kubeseal -o yaml > kagent-${i}-sealed-secret.yaml
-done
-
-# 3. Commit sealed secrets to Git
-git add kagent-*-sealed-secret.yaml
-git commit -m "Add kagent sealed secrets"
-
-# 4. Apply sealed secrets (via GitOps or manually)
-kubectl apply -f kagent-0-sealed-secret.yaml
-kubectl apply -f kagent-1-sealed-secret.yaml
-kubectl apply -f kagent-2-sealed-secret.yaml
-
-# 5. Install kagent (sealed-secrets controller will create the actual secrets)
-helm install kagent . \
-  --set deploymentType=statefulset \
-  --set replicaCount=3 \
-  --set persistence.keypair.type=secret
-```
-
-###### SOPS (Encrypted Files in Git)
-
-Use [SOPS](https://github.com/mozilla/sops) with age, GPG, or cloud KMS:
-
-```bash
-# 1. Generate keypairs
-./generate-secrets.sh 3
-
-# 2. Encrypt the generated secret manifest
-sops --encrypt --age <your-age-public-key> \
-  generated_secrets/generated_secrets.yaml > \
-  generated_secrets/generated_secrets.enc.yaml
-
-# 3. Commit encrypted file to Git
-git add generated_secrets/generated_secrets.enc.yaml
-git commit -m "Add encrypted kagent secrets"
-
-# 4. Decrypt and apply (in CI/CD or locally)
-sops --decrypt generated_secrets/generated_secrets.enc.yaml | kubectl apply -f -
-
-# 5. Install kagent
-helm install kagent . --set replicaCount=3
-```
-
-**Important Notes**:
-- When using `persistence.keypair.type: secret`, secrets must exist **before** installing the chart
-- Each secret must contain both `private_key.pem` and `public_key.pem` keys
-- Secret names must follow the pattern: `{{ .Release.Name }}-{{ replica-index }}-secret`
-- For custom release names, ensure secret names match (e.g., `my-agent-0-secret`, `my-agent-1-secret`)
-- **Never commit unencrypted keypairs to Git** - always use encryption (Sealed Secrets, SOPS) or external secret managers
-
-#### Using PVC for Keypair Storage
-
-If you prefer PersistentVolumeClaims for keypairs instead of secrets:
-
-```bash
-# StatefulSet with PVC-based keypair storage
-helm install kagent . \
-  --set deploymentType=statefulset \
-  --set persistence.keypair.type=pvc
-```
-
-#### Using hostPath for Keypair Storage (DaemonSet)
-
-For DaemonSet deployments with node-local keypair storage:
-
-```bash
-# DaemonSet pattern with hostPath keypairs
-helm install kagent . \
-  --set deploymentType=daemonset \
-  --set persistence.keypair.enabled=true \
-  --set persistence.keypair.type=hostPath \
-  --set persistence.keypair.hostPath.path=/var/lib/kagent/keys
-```
-
-### Network Policies
-
-Enable network policies to restrict egress traffic:
+- **Ingress**: Opens ports for every enabled service capability
+- **Egress**: Always includes DNS (53) and Kentik API (443). Adds synthetics TCP 8877 when synthetics is enabled.
+- **Manual egress**: SNMP/ST polling via ranger (UDP 161) and SSH for NMS (TCP 22) are commented-out in defaults since they require CIDR scoping to your network.
 
 ```yaml
 networkPolicy:
   enabled: true
-  egress:
-    # DNS
-    - to:
-      - namespaceSelector: {}
-      ports:
-      - protocol: UDP
-        port: 53
-    # Kentik API
-    - to:
-      - ipBlock:
-          cidr: 0.0.0.0/0
-      ports:
-      - protocol: TCP
-        port: 443
-    # SNMP (adjust CIDR for your network)
-    - to:
-      - ipBlock:
-          cidr: 10.0.0.0/8
-      ports:
-      - protocol: UDP
-        port: 161
+  # Default egress rules include DNS and Kentik API.
+  # Uncomment SNMP/SSH in values.yaml and adjust CIDRs for your network.
 ```
 
-### Custom ConfigMap
+## Deployment Patterns
 
-For advanced configuration overrides:
+### StatefulSet (Default)
 
-```yaml
-configmap:
-  enabled: true
-  data:
-    K_CUSTOM_SETTING: "value"
-    K_ANOTHER_SETTING: "value2"
-```
-
-**Note**: Environment variables take precedence over ConfigMap values.
-
-## Upgrade Strategy
-
-### Within Same Pattern
-
-Upgrades within the same deployment pattern are supported:
+Stable pod identities and persistent storage. Best for production.
 
 ```bash
-# Upgrade StatefulSet pattern
-helm upgrade kagent . \
+helm install kagent . \
   --set-string kagent.companyId=YOUR_COMPANY_ID \
   --set-string kagent.provisioningToken=YOUR_PROVISIONING_TOKEN \
-  --set replicaCount=3
-
-# Upgrade with new image version
-helm upgrade kagent . \
-  --set-string kagent.companyId=YOUR_COMPANY_ID \
-  --set-string kagent.provisioningToken=YOUR_PROVISIONING_TOKEN \
-  --set image.tag=v4.2.0
+  --set replicaCount=1
 ```
 
-### Changing Configuration
+### DaemonSet
+
+One agent per node. Good for node-level monitoring.
 
 ```bash
-# Update log level
+helm install kagent . -f examples/daemon-set.yaml \
+  --set-string kagent.companyId=YOUR_COMPANY_ID \
+  --set-string kagent.provisioningToken=YOUR_PROVISIONING_TOKEN
+```
+
+DaemonSet requires `hostPath` or `emptyDir` for persistence (not PVC). See [examples/daemon-set.yaml](examples/daemon-set.yaml).
+
+## Keypair Management
+
+The agent's ed25519 keypair is its identity and must persist across restarts. Storage options via `persistence.keypair.type`:
+
+| Type               | Use Case                                                                      |
+| ------------------ | ----------------------------------------------------------------------------- |
+| `secret` (default) | Production. Works with external secret managers (Vault, ESO, Sealed Secrets). |
+| `pvc`              | StatefulSet with PersistentVolumeClaims.                                      |
+| `hostPath`         | DaemonSet with node-local storage.                                            |
+| `emptyDir`         | Testing only. Keypair lost on restart.                                        |
+
+### Generating Secrets
+
+```bash
+# Generate keypairs for N replicas
+./generate-secrets.sh 3
+
+# Apply before installing
+kubectl apply -f generated_secrets/generated_secrets.yaml
+
+# Then install
+helm install kagent . --set replicaCount=3 \
+  --set-string kagent.companyId=YOUR_COMPANY_ID \
+  --set-string kagent.provisioningToken=YOUR_PROVISIONING_TOKEN
+```
+
+Secret naming convention: `<release-name>-kagent-<replica-index>-secret`, each containing `private_key.pem` and `public_key.pem`.
+
+For external secret manager integration (ESO, Vault, Sealed Secrets, SOPS), create Kubernetes secrets matching this naming pattern using your preferred tool.
+
+## Configuration Reference
+
+### Required
+
+| Parameter                  | Description                                      |
+| -------------------------- | ------------------------------------------------ |
+| `kagent.companyId`         | Kentik company ID                                |
+| `kagent.provisioningToken` | Provisioning token (stored as Kubernetes Secret) |
+
+### Core Settings
+
+| Parameter               | Default                   | Description                             |
+| ----------------------- | ------------------------- | --------------------------------------- |
+| `deploymentType`        | `statefulset`             | `statefulset` or `daemonset`            |
+| `replicaCount`          | `1`                       | Replicas (StatefulSet only)             |
+| `image.tag`             | `v5.0.19`                 | Agent image tag                         |
+| `kagent.releaseChannel` | `stable`                  | Update channel: `stable`, `beta`, `dev` |
+| `kagent.logLevel`       | `info`                    | `debug`, `info`, `warn`, `error`        |
+| `kagent.apiEndpoint`    | `grpc.api.kentik.com:443` | Kentik API endpoint                     |
+
+### Service
+
+| Parameter                | Default     | Description                                 |
+| ------------------------ | ----------- | ------------------------------------------- |
+| `service.enabled`        | `false`     | Create a Service resource                   |
+| `service.type`           | `ClusterIP` | `ClusterIP`, `NodePort`, or `LoadBalancer`  |
+| `service.annotations`    | `{}`        | Service annotations (e.g., cloud LB config) |
+| `service.<cap>.enabled`  | `false`     | Enable a specific capability port           |
+| `service.<cap>.port`     | varies      | Override the default port                   |
+| `service.<cap>.nodePort` | —           | Pin a NodePort (NodePort/LoadBalancer only) |
+
+### Persistence
+
+| Parameter                      | Default  | Description                                |
+| ------------------------------ | -------- | ------------------------------------------ |
+| `persistence.enabled`          | `true`   | Enable persistent storage                  |
+| `persistence.type`             | `pvc`    | `pvc`, `hostPath`, or `emptyDir`           |
+| `persistence.pvc.storageClass` | `""`     | Storage class (empty = cluster default)    |
+| `persistence.pvc.size`         | `10Gi`   | Data volume size                           |
+| `persistence.keypair.type`     | `secret` | `secret`, `pvc`, `hostPath`, or `emptyDir` |
+
+### Security
+
+| Parameter                      | Default | Description           |
+| ------------------------------ | ------- | --------------------- |
+| `podSecurityContext.runAsUser` | `500`   | Container user ID     |
+| `networkPolicy.enabled`        | `false` | Enable NetworkPolicy  |
+| `serviceAccount.create`        | `true`  | Create ServiceAccount |
+| `rbac.create`                  | `false` | Create RBAC resources |
+
+See [values.yaml](values.yaml) for all options and [contracts/values.schema.json](contracts/values.schema.json) for schema validation.
+
+## Security Contexts
+
+Some UA capabilities require specific Linux capabilities. The defaults drop all capabilities and add back only `NET_RAW`. Adjust based on which capabilities you enable:
+
+| Linux Capability   | UA Capabilities                                                                 |
+| ------------------ | ------------------------------------------------------------------------------- |
+| `NET_ADMIN`        | DNS OTT Tap (kdns)                                                              |
+| `NET_BIND_SERVICE` | BGP Proxy (kbgp), Flow Proxy (kproxy) - binding to ports below 1024             |
+| `NET_RAW`          | SNMP/Streaming Telemetry (ranger), Synthetics (ksynth, livesynth) - raw sockets |
+
+## Cloud Storage Classes
+
+| Provider    | Storage Class     |
+| ----------- | ----------------- |
+| AWS (EKS)   | `gp3`             |
+| Azure (AKS) | `managed-premium` |
+| GCP (GKE)   | `standard-rwo`    |
+
+```bash
+helm install kagent . \
+  --set persistence.pvc.storageClass=gp3 \
+  --set-string kagent.companyId=YOUR_COMPANY_ID \
+  --set-string kagent.provisioningToken=YOUR_PROVISIONING_TOKEN
+```
+
+## Upgrades
+
+```bash
+# Upgrade configuration
 helm upgrade kagent . \
   --set-string kagent.companyId=YOUR_COMPANY_ID \
   --set-string kagent.provisioningToken=YOUR_PROVISIONING_TOKEN \
   --set kagent.logLevel=debug
 
-# Update release channel
+# Refresh an expired provisioning token
 helm upgrade kagent . \
   --set-string kagent.companyId=YOUR_COMPANY_ID \
-  --set-string kagent.provisioningToken=YOUR_PROVISIONING_TOKEN \
-  --set kagent.releaseChannel=beta
-```
-
-### Refreshing an Expired Provisioning Token
-
-If the provisioning token expires, upgrade with the new token and restart pods:
-
-```bash
-helm upgrade kagent . \
-  --set-string kagent.companyId=YOUR_COMPANY_ID \
-  --set-string kagent.provisioningToken=NEW_REFRESHED_TOKEN
-
-# Pods must be restarted to pick up the new token value
+  --set-string kagent.provisioningToken=NEW_TOKEN
 kubectl rollout restart statefulset/kagent
-# or for daemonset:
-kubectl rollout restart daemonset/kagent
 ```
 
-## Values Schema
-
-For complete field definitions and validation, see [contracts/values.schema.json](contracts/values.schema.json).
+Switching between deployment patterns (StatefulSet ↔ DaemonSet) requires `helm uninstall` and a fresh install.
 
 ## Development
 
-### Linting
-
 ```bash
-helm lint .
-```
+# Lint
+helm lint . --set-string kagent.companyId=123 --set-string kagent.provisioningToken=tok
 
-### Template Rendering
+# Render templates
+helm template kagent . --set-string kagent.companyId=123 --set-string kagent.provisioningToken=tok
 
-```bash
-
-# Render StatefulSet pattern
-helm template kagent . \
-  --set-string kagent.companyId=123 \
-  --set-string kagent.provisioningToken=tok \
-  --set deploymentType=statefulset
-
-# Render DaemonSet pattern
-helm template kagent . \
-  --set-string kagent.companyId=123 \
-  --set-string kagent.provisioningToken=tok \
-  --set deploymentType=daemonset
-```
-
-### Testing
-
-```bash
-# Dry run install
-helm install kagent . --dry-run --debug \
-  --set-string kagent.companyId=123 \
-  --set-string kagent.provisioningToken=tok
+# Run unit tests
+helm unittest .
 ```
 
 ## Support
 
-- Documentation: https://github.com/kentik/kagent-helm
 - Issues: https://github.com/kentik/kagent-helm/issues
 - Kentik Support: support@kentik.com
 

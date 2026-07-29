@@ -94,6 +94,16 @@ tests:
       - isNull:
           path: spec.template.spec.containers[0].readinessProbe
 
+  - it: should auto-enable HC server when service.healthCheck.enabled without probes
+    set:
+      service.healthCheck.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: K_HC_SERVER_ENABLED
+            value: "true"
+
   - it: should render only livenessProbe when readinessProbe is absent
     set:
       livenessProbe:

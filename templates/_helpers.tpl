@@ -97,6 +97,13 @@ Validate all chart configuration
 {{- end }}
 {{- end }}
 {{- end }}
+{{- /* Validate service: at least one capability must be enabled */ -}}
+{{- if .Values.service.enabled }}
+{{- $svc := .Values.service }}
+{{- if not (or ($svc.flowProxy).enabled ($svc.snmpTrap).enabled ($svc.syslog).enabled ($svc.bgp).enabled ($svc.synthetics).enabled ($svc.healthCheck).enabled) }}
+{{- fail "service.enabled is true but no capability ports are enabled. Enable at least one of: flowProxy, snmpTrap, syslog, bgp, synthetics, healthCheck" }}
+{{- end }}
+{{- end }}
 {{- end }}
 
 {{/*
@@ -133,14 +140,15 @@ Kagent container definition (shared across deployment types)
     value: "/opt/ua/keys"
   - name: K_K8S_HELM
     value: "true"
-  # Health check server configuration (auto-enabled when probes are enabled)
-  {{- if or $lp.enabled $rp.enabled }}
+  # Health check server configuration (auto-enabled when probes or service.healthCheck are enabled)
+  {{- $hcSvc := (.Values.service).healthCheck | default dict }}
+  {{- if or $lp.enabled $rp.enabled $hcSvc.enabled }}
   - name: K_HC_SERVER_ENABLED
     value: "true"
   - name: K_HC_SERVER_NETWORK
     value: "tcp4"
   - name: K_HC_SERVER_ADDRESS
-    value: {{ printf ":%d" (($lp.httpGet | default dict).port | default ($rp.httpGet | default dict).port | default 8099 | int) | quote }}
+    value: {{ printf ":%d" (($lp.httpGet | default dict).port | default ($rp.httpGet | default dict).port | default ($hcSvc.port | default 8099) | int) | quote }}
   {{- end }}
   # Disk space reservation
   - name: K_DISK_SPACE_RESERVATION_ENABLED
@@ -155,6 +163,7 @@ Kagent container definition (shared across deployment types)
   - configMapRef:
       name: {{ include "kagent.fullname" . }}-config
   {{- end }}
+  {{- include "kagent.containerPorts" . | nindent 2 }}
   {{- include "kagent.volumeMounts" . | nindent 2 }}
   securityContext:
     {{- toYaml .Values.securityContext | nindent 4 }}
@@ -182,6 +191,63 @@ Kagent container definition (shared across deployment types)
     timeoutSeconds: {{ $rp.timeoutSeconds | default 5 }}
     failureThreshold: {{ $rp.failureThreshold | default 3 }}
   {{- end }}
+{{- end }}
+
+{{/*
+Check if any service capability port is enabled.
+Returns non-empty string (truthy) if at least one is enabled.
+*/}}
+{{- define "kagent.hasServicePorts" -}}
+{{- $svc := .Values.service | default dict -}}
+{{- if or ($svc.flowProxy).enabled ($svc.snmpTrap).enabled ($svc.syslog).enabled ($svc.bgp).enabled ($svc.synthetics).enabled ($svc.healthCheck).enabled -}}
+true
+{{- end -}}
+{{- end -}}
+
+{{/*
+Container ports for enabled service capabilities.
+Ports are rendered whenever a capability is enabled, regardless of service.enabled,
+so that kubectl port-forward and pod describe show the listening ports.
+*/}}
+{{- define "kagent.containerPorts" -}}
+{{- $svc := .Values.service | default dict }}
+{{- $ports := list }}
+{{- $fp := $svc.flowProxy | default dict }}
+{{- if $fp.enabled }}
+{{- $ports = append $ports (dict "name" "flow-proxy" "containerPort" ($fp.targetPort | default ($fp.port | default 9995) | int) "protocol" ($fp.protocol | default "UDP")) }}
+{{- end }}
+{{- $st := $svc.snmpTrap | default dict }}
+{{- if $st.enabled }}
+{{- $ports = append $ports (dict "name" "snmp-trap" "containerPort" ($st.targetPort | default ($st.port | default 162) | int) "protocol" ($st.protocol | default "UDP")) }}
+{{- end }}
+{{- $sl := $svc.syslog | default dict }}
+{{- if $sl.enabled }}
+{{- $syslogPort := $sl.targetPort | default ($sl.port | default 514) | int }}
+{{- $protocols := $sl.protocols | default (list "UDP" "TCP") }}
+{{- range $protocols }}
+{{- $ports = append $ports (dict "name" (printf "syslog-%s" (lower .)) "containerPort" $syslogPort "protocol" .) }}
+{{- end }}
+{{- end }}
+{{- $bgp := $svc.bgp | default dict }}
+{{- if $bgp.enabled }}
+{{- $ports = append $ports (dict "name" "bgp" "containerPort" ($bgp.targetPort | default ($bgp.port | default 179) | int) "protocol" ($bgp.protocol | default "TCP")) }}
+{{- end }}
+{{- $syn := $svc.synthetics | default dict }}
+{{- if $syn.enabled }}
+{{- $ports = append $ports (dict "name" "synthetics" "containerPort" ($syn.targetPort | default ($syn.port | default 9977) | int) "protocol" ($syn.protocol | default "UDP")) }}
+{{- end }}
+{{- $hc := $svc.healthCheck | default dict }}
+{{- if $hc.enabled }}
+{{- $ports = append $ports (dict "name" "health-check" "containerPort" ($hc.targetPort | default ($hc.port | default 8099) | int) "protocol" ($hc.protocol | default "TCP")) }}
+{{- end }}
+{{- if $ports }}
+ports:
+{{- range $ports }}
+- name: {{ .name }}
+  containerPort: {{ .containerPort }}
+  protocol: {{ .protocol }}
+{{- end }}
+{{- end }}
 {{- end }}
 
 {{/*

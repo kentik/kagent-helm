@@ -1,0 +1,18 @@
+{{- if eq .Values.deploymentType "statefulset" }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "kagent.fullname" . }}-headless
+  labels:
+    {{- include "kagent.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    {{- include "kagent.selectorLabels" . | nindent 4 }}
+  ports:
+  - name: headless
+    port: 8099
+    targetPort: 8099
+    protocol: TCP
+{{- end }}

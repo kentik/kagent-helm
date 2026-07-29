@@ -1,4 +1,10 @@
 {{- if .Values.networkPolicy.enabled }}
+{{- $svc := .Values.service | default dict }}
+{{- $lp := .Values.livenessProbe | default dict }}
+{{- $rp := .Values.readinessProbe | default dict }}
+{{- $probesEnabled := or $lp.enabled $rp.enabled }}
+{{- $probePort := ($lp.httpGet | default dict).port | default (($rp.httpGet | default dict).port | default 8099) }}
+{{- $hasIngress := or (include "kagent.hasServicePorts" .) $probesEnabled }}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -11,7 +17,56 @@ spec:
       {{- include "kagent.selectorLabels" . | nindent 6 }}
   policyTypes:
     - Egress
+    {{- if $hasIngress }}
+    - Ingress
+    {{- end }}
   egress:
+    {{- if .Values.networkPolicy.egress }}
     {{- toYaml .Values.networkPolicy.egress | nindent 4 }}
+    {{- end }}
+    {{- /* Auto-add egress rules for capabilities that initiate outbound connections */ -}}
+    {{- if ($svc.synthetics).enabled }}
+    # Synthetics: outbound mesh test initiation to peer agents (all destinations)
+    - ports:
+      - protocol: TCP
+        port: 8877
+    {{- end }}
+  {{- if $hasIngress }}
+  ingress:
+    {{- with .Values.networkPolicy.ingressFrom }}
+    - from:
+        {{- toYaml . | nindent 8 }}
+      ports:
+    {{- else }}
+    - ports:
+    {{- end }}
+      {{- if ($svc.flowProxy).enabled }}
+      - protocol: {{ $svc.flowProxy.protocol | default "UDP" }}
+        port: {{ $svc.flowProxy.targetPort | default ($svc.flowProxy.port | default 9995) }}
+      {{- end }}
+      {{- if ($svc.snmpTrap).enabled }}
+      - protocol: {{ $svc.snmpTrap.protocol | default "UDP" }}
+        port: {{ $svc.snmpTrap.targetPort | default ($svc.snmpTrap.port | default 162) }}
+      {{- end }}
+      {{- if ($svc.syslog).enabled }}
+      {{- $syslogPort := $svc.syslog.targetPort | default ($svc.syslog.port | default 514) }}
+      {{- range ($svc.syslog.protocols | default (list "UDP" "TCP")) }}
+      - protocol: {{ . }}
+        port: {{ $syslogPort }}
+      {{- end }}
+      {{- end }}
+      {{- if ($svc.bgp).enabled }}
+      - protocol: {{ $svc.bgp.protocol | default "TCP" }}
+        port: {{ $svc.bgp.targetPort | default ($svc.bgp.port | default 179) }}
+      {{- end }}
+      {{- if ($svc.synthetics).enabled }}
+      - protocol: {{ $svc.synthetics.protocol | default "UDP" }}
+        port: {{ $svc.synthetics.targetPort | default ($svc.synthetics.port | default 9977) }}
+      {{- end }}
+      {{- if or ($svc.healthCheck).enabled $probesEnabled }}
+      - protocol: TCP
+        port: {{ ($svc.healthCheck).targetPort | default (($svc.healthCheck).port | default $probePort) }}
+      {{- end }}
+  {{- end }}
 {{- end }}
 
