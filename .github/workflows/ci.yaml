@@ -65,6 +65,12 @@ jobs:
             args: "--set-string kagent.companyId=test-company --set-string kagent.provisioningToken=test-token --set deploymentType=daemonset --set persistence.type=hostPath --set persistence.keypair.type=hostPath"
           - name: daemonset-no-probes
             args: "--set-string kagent.companyId=test-company --set-string kagent.provisioningToken=test-token --set deploymentType=daemonset --set persistence.type=hostPath --set persistence.keypair.type=hostPath --set livenessProbe=null --set readinessProbe=null"
+          - name: openshift-statefulset
+            args: "--set-string kagent.companyId=test-company --set-string kagent.provisioningToken=test-token --set openshift.enabled=true"
+          - name: openshift-custom-scc
+            args: "--set-string kagent.companyId=test-company --set-string kagent.provisioningToken=test-token --set openshift.enabled=true --set openshift.restrictedSecurityContext=false --set openshift.securityContextConstraints.create=true"
+          - name: kproxy-loadbalancer
+            args: "-f docs/kproxy-loadbalancer-values.yaml --set-string kagent.companyId=test-company --set-string kagent.provisioningToken=test-token"
     steps:
       - uses: actions/checkout@v4
 
@@ -74,3 +80,23 @@ jobs:
 
       - name: "Template render: ${{ matrix.scenario.name }}"
         run: helm template test-release . ${{ matrix.scenario.args }}
+
+  package:
+    name: Package Chart
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.17.3
+
+      - name: Package chart (build validation)
+        run: helm package . --destination dist
+
+      - name: Upload packaged chart
+        uses: actions/upload-artifact@v4
+        with:
+          name: helm-chart
+          path: dist/*.tgz
+

@@ -60,6 +60,13 @@ Create the name of the service account to use
 {{- end }}
 
 {{/*
+Create the name of the OpenShift SecurityContextConstraints to use
+*/}}
+{{- define "kagent.openshiftSccName" -}}
+{{- default (printf "%s-scc" (include "kagent.fullname" .)) .Values.openshift.securityContextConstraints.name | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/*
 Validate all chart configuration
 */}}
 {{- define "kagent.validate" -}}
@@ -100,11 +107,40 @@ Validate all chart configuration
 {{- end }}
 
 {{/*
+Pod security context with OpenShift restricted SCC compatibility
+*/}}
+{{- define "kagent.podSecurityContext" -}}
+{{- if and .Values.openshift.enabled .Values.openshift.restrictedSecurityContext }}
+{{- $podSecurityContext := omit .Values.podSecurityContext "runAsUser" "runAsGroup" "fsGroup" -}}
+{{- $_ := set $podSecurityContext "seccompProfile" (dict "type" "RuntimeDefault") -}}
+{{- toYaml $podSecurityContext }}
+{{- else }}
+{{- toYaml .Values.podSecurityContext }}
+{{- end }}
+{{- end }}
+
+{{/*
+Container security context with OpenShift restricted SCC compatibility
+*/}}
+{{- define "kagent.securityContext" -}}
+{{- $securityContext := deepCopy .Values.securityContext -}}
+{{- if and .Values.openshift.enabled .Values.openshift.restrictedSecurityContext }}
+{{- $capabilities := deepCopy ($securityContext.capabilities | default dict) -}}
+{{- $_ := unset $capabilities "add" -}}
+{{- $_ := set $securityContext "capabilities" $capabilities -}}
+{{- end }}
+{{- toYaml $securityContext }}
+{{- end }}
+
+{{/*
 Kagent container definition (shared across deployment types)
 */}}
 {{- define "kagent.container" -}}
 {{- $lp := .Values.livenessProbe | default dict }}
 {{- $rp := .Values.readinessProbe | default dict }}
+{{- $hc := .Values.kagent.healthCheck | default dict }}
+{{- $healthEnabled := or $hc.enabled $lp.enabled $rp.enabled .Values.service.enabled }}
+{{- $healthPort := (($lp.httpGet | default dict).port | default ($rp.httpGet | default dict).port | default $hc.port | default 8099 | int) }}
 - name: kagent
   image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
   imagePullPolicy: {{ .Values.image.pullPolicy }}
@@ -134,13 +170,13 @@ Kagent container definition (shared across deployment types)
   - name: K_K8S_HELM
     value: "true"
   # Health check server configuration (auto-enabled when probes are enabled)
-  {{- if or $lp.enabled $rp.enabled }}
+  {{- if $healthEnabled }}
   - name: K_HC_SERVER_ENABLED
     value: "true"
   - name: K_HC_SERVER_NETWORK
-    value: "tcp4"
+    value: {{ $hc.network | default "tcp4" | quote }}
   - name: K_HC_SERVER_ADDRESS
-    value: {{ printf ":%d" (($lp.httpGet | default dict).port | default ($rp.httpGet | default dict).port | default 8099 | int) | quote }}
+    value: {{ $hc.address | default (printf ":%d" $healthPort) | quote }}
   {{- end }}
   # Disk space reservation
   - name: K_DISK_SPACE_RESERVATION_ENABLED
@@ -156,8 +192,19 @@ Kagent container definition (shared across deployment types)
       name: {{ include "kagent.fullname" . }}-config
   {{- end }}
   {{- include "kagent.volumeMounts" . | nindent 2 }}
+  {{- if or $healthEnabled .Values.extraContainerPorts }}
+  ports:
+  {{- if $healthEnabled }}
+  - name: health
+    containerPort: {{ $healthPort }}
+    protocol: TCP
+  {{- end }}
+  {{- with .Values.extraContainerPorts }}
+    {{- toYaml . | nindent 2 }}
+  {{- end }}
+  {{- end }}
   securityContext:
-    {{- toYaml .Values.securityContext | nindent 4 }}
+    {{- include "kagent.securityContext" . | nindent 4 }}
   resources:
     {{- toYaml .Values.resources | nindent 4 }}
   {{- if $lp.enabled }}
@@ -194,7 +241,7 @@ imagePullSecrets:
 {{- end }}
 serviceAccountName: {{ include "kagent.serviceAccountName" . }}
 securityContext:
-  {{- toYaml .Values.podSecurityContext | nindent 2 }}
+  {{- include "kagent.podSecurityContext" . | nindent 2 }}
 containers:
 {{- include "kagent.container" . | nindent 0 }}
 {{- with .Values.nodeSelector }}
@@ -231,6 +278,18 @@ volumes:
 {{- end }}
 
 {{/*
+Machine ID feature gate.
+Renders "true" only when a stable, identity-scoped /etc/machine-id can be
+provided: StatefulSet workload with a Secret-backed keypair (the identity),
+where the setup-keypair init container generates the machine-id.
+*/}}
+{{- define "kagent.machineIdEnabled" -}}
+{{- if and (.Values.kagent.machineId | default dict).enabled (eq .Values.deploymentType "statefulset") .Values.persistence.keypair.enabled (eq .Values.persistence.keypair.type "secret") -}}
+true
+{{- end -}}
+{{- end -}}
+
+{{/*
 Volume mounts shared across deployment patterns
 */}}
 {{- define "kagent.volumeMounts" -}}
@@ -250,6 +309,12 @@ volumeMounts:
 - name: data
   mountPath: /opt/ua/keys
   subPath: keys
+{{- end }}
+{{- if include "kagent.machineIdEnabled" . }}
+- name: machine-id
+  mountPath: /etc/machine-id
+  subPath: machine-id
+  readOnly: true
 {{- end }}
 {{- end }}
 

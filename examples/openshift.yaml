@@ -1,0 +1,16 @@
+openshift:
+  enabled: true
+
+kagent:
+  companyId: 1111111
+  # Provide a stable, identity-scoped /etc/machine-id instead of the host's.
+  # Avoids the blocked hostPath mount of /etc/machine-id under the restricted SCC.
+  machineId:
+    enabled: true
+
+persistence:
+  enabled: true
+  type: pvc
+  keypair:
+    enabled: true
+    type: secret

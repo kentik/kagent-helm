@@ -21,6 +21,11 @@
 #   - Automatically scales with cluster node count
 #   - Typically uses hostPath volumes for local node storage
 #
+# OpenShift:
+#   - Use statefulset or daemonset with openshift.enabled=true
+#   - Defaults to OpenShift restricted-v2 compatible pod/container security contexts
+#   - Optional custom SecurityContextConstraints can be created for NET_RAW or hostPath use cases
+#
 deploymentType: statefulset
 
 # Number of replicas (StatefulSet patterns only)
@@ -68,6 +73,30 @@ kagent:
   # Kentik API endpoint
   apiEndpoint: "grpc.api.kentik.com:443"
 
+  # Health check server configuration.
+  # Enable this when an external load balancer needs a TCP/HTTP health endpoint
+  # on each kagent pod, such as kproxy UDP intake deployments.
+  healthCheck:
+    enabled: false               # K_HC_SERVER_ENABLED
+    network: tcp4                # K_HC_SERVER_NETWORK
+    port: 8099
+    address: ""                 # K_HC_SERVER_ADDRESS; empty renders as :<port>
+
+  # Identity-scoped machine ID.
+  # Provides a stable /etc/machine-id to the container instead of relying on the
+  # host's /etc/machine-id (which requires a hostPath mount and is shared by all
+  # pods on a node). When enabled, the setup-keypair init container generates a
+  # machine-id derived from the pod's public key: 32 lowercase hex characters in
+  # the standard Linux /etc/machine-id format, unique per agent identity (even
+  # for co-located pods) and stable across restarts.
+  #
+  # Requirements: deploymentType=statefulset with persistence.keypair.type=secret
+  # (the default OpenShift-recommended identity model). Ignored otherwise.
+  # Recommended for OpenShift, where mounting the host /etc/machine-id via
+  # hostPath is blocked by the restricted SCC.
+  machineId:
+    enabled: false
+
 # Service account configuration
 serviceAccount:
   create: true
@@ -77,6 +106,30 @@ serviceAccount:
 # RBAC configuration (if kagent needs Kubernetes API access)
 rbac:
   create: false
+
+# OpenShift configuration
+openshift:
+  # Enable OpenShift-specific rendering behavior.
+  # When enabled with restrictedSecurityContext=true, the chart omits fixed UID/GID
+  # fields and extra Linux capabilities so OpenShift can assign values via SCC.
+  enabled: false
+
+  # Keep enabled for the default OpenShift restricted-v2 SCC.
+  # Disable only when binding the service account to an SCC that permits the chart's
+  # configured podSecurityContext and securityContext values.
+  restrictedSecurityContext: true
+
+  # Optional custom SecurityContextConstraints for deployments that need capabilities
+  # such as NET_RAW or hostPath volumes. Creating SCCs requires cluster-admin rights.
+  securityContextConstraints:
+    create: false
+    name: ""
+    annotations: {}
+    allowHostDirVolumePlugin: false
+    allowHostNetwork: false
+    allowPrivilegedContainer: false
+    allowedCapabilities:
+      - NET_RAW
 
 # Network policy configuration (opt-in, disabled by default for compatibility)
 # Configure according to organizational policies
@@ -112,16 +165,19 @@ podSecurityContext:
 
 # Container security context
 #
-# Some Universal Agent capabilities require specific Linux capabilities to function
-# correctly. By default, all capabilities are dropped and only the required ones are
-# added back. If you are not using certain UA capabilities, you can remove the
-# corresponding Linux capabilities from the 'add' list to follow the principle of
-# least privilege.
+# kagent itself needs no special Linux capabilities. Individual Universal Agent (UA)
+# capabilities may each require one or more Linux capabilities to be added back. By default
+# all capabilities are dropped and only NET_RAW is added (covers the default NMS use case).
+# Add only what the UA capabilities you actually run require, following the principle of
+# least privilege. See docs/capabilities.md for the full reference.
 #
-# Linux capabilities mapped to Universal Agent capabilities:
-#   NET_ADMIN        - kdns (network administration operations)
-#   NET_BIND_SERVICE - kbgp, kproxy (bind to privileged ports below 1024)
-#   NET_RAW          - ranger/nms,ksynth,livesynth (raw sockets for packet capture)
+# Linux capabilities required per UA capability (add to capabilities.add):
+#   NET_RAW          - ktraffic, kdns, ranger/nms, ksynth, livesynth (raw sockets / capture)
+#   NET_BIND_SERVICE - ksyslog (514), ksnmptrap (162); kproxy/kbgp only if bound to a port <1024
+#   SYS_CHROOT       - livesynth (connectivity test)
+#   SETUID, SETGID   - livesynth (connectivity test)
+#
+# Needs no added capabilities: kptr, ksqueegee, and kproxy/kbgp on their default (>1024) ports.
 
 securityContext:
   allowPrivilegeEscalation: false
@@ -143,6 +199,30 @@ resources:
   limits:
     cpu: 2
     memory: 4096Mi
+
+# Extra container ports to expose on the kagent container.
+# The health check port is added automatically when kagent.healthCheck or probes are enabled.
+extraContainerPorts: []
+  # - name: netflow
+  #   containerPort: 9995
+  #   protocol: UDP
+
+# Service configuration for exposing kagent traffic inside or outside the cluster.
+# This is disabled by default because most kagent deployments only need outbound HTTPS.
+# Enable it for kproxy UDP intake or external load balancer health checks.
+service:
+  enabled: false
+  type: ClusterIP
+  annotations: {}
+  labels: {}
+  externalTrafficPolicy: ""
+  loadBalancerIP: ""
+  loadBalancerSourceRanges: []
+  ports:
+    - name: health
+      port: 8099
+      targetPort: health
+      protocol: TCP
 
 # Node selector
 nodeSelector: {}

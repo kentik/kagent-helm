@@ -1,6 +1,6 @@
 # Kagent Helm Chart
 
-A Helm chart for deploying Kentik Universal Agent (kagent) with support for multiple deployment patterns: StatefulSet and DaemonSet.
+A Helm chart for deploying Kentik Universal Agent (kagent) with support for multiple deployment patterns: StatefulSet and DaemonSet. OpenShift-specific deployment support is available with `openshift.enabled=true`.
 
 ## Prerequisites
 
@@ -24,19 +24,25 @@ helm install kagent . \
   --set-string kagent.provisioningToken=YOUR_PROVISIONING_TOKEN
 ```
 
-Alternatively, install directly from the GitHub repository without cloning:
+Alternatively, install directly from the published OCI chart without cloning:
 
 ```bash
-# Install with StatefulSet pattern
-helm install kagent oci://ghcr.io/kentik/kagent-helm \
+# Install the latest published chart from the GitHub Container Registry
+helm install kagent oci://ghcr.io/kentik/kagent \
   --set-string kagent.companyId=YOUR_COMPANY_ID \
   --set-string kagent.provisioningToken=YOUR_PROVISIONING_TOKEN
 
-# Or from a specific version/tag
-helm install kagent https://github.com/kentik/kagent-helm/archive/refs/heads/main.tar.gz \
+# Or pin a specific chart version
+helm install kagent oci://ghcr.io/kentik/kagent \
+  --version 1.2.0 \
   --set-string kagent.companyId=YOUR_COMPANY_ID \
   --set-string kagent.provisioningToken=YOUR_PROVISIONING_TOKEN
 ```
+
+> The chart is packaged and published to `oci://ghcr.io/<owner>/kagent` by the
+> [Release workflow](.github/workflows/release.yaml) whenever a `v*.*.*` tag is pushed.
+> Forks publish under their own owner (for example `oci://ghcr.io/mkrygeri/kagent`).
+
 
 ### 2. Verify Installation
 
@@ -126,6 +132,77 @@ kubectl get pods -l app.kubernetes.io/name=kagent --no-headers | wc -l
 kubectl get pods -l app.kubernetes.io/name=kagent -o wide
 ```
 
+### OpenShift
+
+OpenShift deployments use the existing StatefulSet or DaemonSet patterns with OpenShift-specific security-context rendering enabled:
+
+```bash
+helm install kagent . \
+  --set-string kagent.companyId=YOUR_COMPANY_ID \
+  --set openshift.enabled=true
+```
+
+See the dedicated [OpenShift deployment guide](docs/openshift.md) for restricted SCC deployments, optional custom SCC creation, and DaemonSet hostPath guidance.
+
+## External Load Balancers And kproxy
+
+Most kagent deployments only initiate outbound HTTPS connections to Kentik and do not need an inbound Service. kproxy-style deployments are different: kagent receives UDP telemetry such as NetFlow/IPFIX/sFlow from network devices, then forwards the processed data to Kentik over HTTPS.
+
+For kproxy UDP intake, enable a Kubernetes `Service` of type `LoadBalancer` or `NodePort` and expose both:
+
+- One or more UDP intake ports for telemetry from network devices
+- A TCP health check port so the external load balancer can determine which kagent endpoints are healthy
+
+The health check server is controlled by `kagent.healthCheck` and maps to `K_HC_SERVER_*` environment variables:
+
+```yaml
+kagent:
+  healthCheck:
+    enabled: true
+    port: 8099
+```
+
+The chart automatically exposes the health check as a named container port when `kagent.healthCheck.enabled=true`, probes are enabled, or `service.enabled=true`. Add UDP intake ports through `extraContainerPorts`, then publish them with `service.ports`:
+
+```yaml
+deploymentType: daemonset
+
+kagent:
+  companyId: YOUR_COMPANY_ID
+  healthCheck:
+    enabled: true
+    port: 8099
+
+extraContainerPorts:
+  - name: netflow
+    containerPort: 9995
+    protocol: UDP
+
+service:
+  enabled: true
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  ports:
+    - name: health
+      port: 8099
+      targetPort: health
+      protocol: TCP
+    - name: netflow
+      port: 9995
+      targetPort: netflow
+      protocol: UDP
+```
+
+See [docs/kproxy-loadbalancer-values.yaml](docs/kproxy-loadbalancer-values.yaml) for a complete starting point.
+
+### Choosing A Load Balancer Pattern
+
+**StatefulSet** is best when kagent primarily needs durable identity and storage. A single LoadBalancer Service can distribute UDP across replicas, but the external load balancer sees the Kubernetes Service as one backend set. Use this when per-node intake is not required.
+
+**DaemonSet** is usually the better kproxy intake pattern. It runs one kagent per node and pairs well with `externalTrafficPolicy: Local`, which keeps load-balanced traffic on nodes that have a local kagent endpoint and preserves the original source IP when the platform supports it.
+
+**OpenShift** uses the same Service model. For OpenShift Route, remember that Routes are HTTP/TLS focused and are not suitable for UDP telemetry. Use a Service `type: LoadBalancer`, `NodePort`, or platform-specific load balancer integration for UDP intake.
+
 ## Configuration
 
 ### Kagent Settings
@@ -141,6 +218,7 @@ kubectl get pods -l app.kubernetes.io/name=kagent -o wide
 | `kagent.logDest` | Log destination (stdout, stderr, discard, filename) | `stdout` |
 | `kagent.logLevel` | Log level (debug, info, warn, error) | `info` |
 | `kagent.apiEndpoint` | Kentik API endpoint | `grpc.api.kentik.com:443` |
+| `kagent.machineId.enabled` | Provide a stable, identity-scoped `/etc/machine-id` (32 lowercase hex chars) derived from the pod keypair instead of the host machine-id. Requires `deploymentType=statefulset` with `persistence.keypair.type=secret`. Recommended for OpenShift. | `false` |
 
 ### Deployment Configuration
 
@@ -191,6 +269,42 @@ kubectl get pods -l app.kubernetes.io/name=kagent -o wide
 | `serviceAccount.create` | Create service account | `true` |
 | `rbac.create` | Create RBAC resources | `false` |
 | `networkPolicy.enabled` | Enable network policy | `false` |
+
+kagent itself needs no special Linux capabilities. Individual Universal Agent capabilities
+(flow, SNMP, synthetics, syslog, etc.) may each require specific capabilities under
+`securityContext.capabilities.add`. See the [Linux capabilities guide](docs/capabilities.md)
+for the full per-capability reference.
+
+
+### Health Checks And Services
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `kagent.healthCheck.enabled` | Enable the kagent health check server | `false` |
+| `kagent.healthCheck.network` | Health check listener network (`tcp`, `tcp4`, `tcp6`) | `tcp4` |
+| `kagent.healthCheck.port` | Health check listener port | `8099` |
+| `kagent.healthCheck.address` | Health check listen address (empty = `:<port>`) | `""` |
+| `extraContainerPorts` | Additional container ports, such as UDP kproxy intake ports | `[]` |
+| `service.enabled` | Create a Service for inbound traffic | `false` |
+| `service.type` | Service type: `ClusterIP`, `NodePort`, `LoadBalancer` | `ClusterIP` |
+| `service.annotations` | Service annotations for cloud/provider load balancers | `{}` |
+| `service.externalTrafficPolicy` | External traffic policy for `NodePort`/`LoadBalancer` | `""` |
+| `service.loadBalancerIP` | Static load balancer IP, when supported | `""` |
+| `service.loadBalancerSourceRanges` | Allowed source CIDRs for the load balancer | `[]` |
+| `service.ports` | Service ports for TCP health checks and UDP intake | health TCP 8099 |
+
+### OpenShift
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `openshift.enabled` | Enable OpenShift-specific rendering behavior | `false` |
+| `openshift.restrictedSecurityContext` | Omit fixed UID/GID fields and added capabilities for restricted-v2 SCC compatibility | `true` |
+| `openshift.securityContextConstraints.create` | Create a custom OpenShift SecurityContextConstraints resource | `false` |
+| `openshift.securityContextConstraints.name` | Custom SCC name (empty = generated) | `""` |
+| `openshift.securityContextConstraints.allowHostDirVolumePlugin` | Allow hostPath volumes in the custom SCC | `false` |
+| `openshift.securityContextConstraints.allowHostNetwork` | Allow host networking in the custom SCC | `false` |
+| `openshift.securityContextConstraints.allowPrivilegedContainer` | Allow privileged containers in the custom SCC | `false` |
+| `openshift.securityContextConstraints.allowedCapabilities` | Linux capabilities allowed by the custom SCC | `[NET_RAW]` |
 
 ## Cloud-Specific Examples
 
@@ -907,6 +1021,12 @@ helm template kagent . \
   --set-string kagent.companyId=123 \
   --set-string kagent.provisioningToken=tok \
   --set deploymentType=daemonset
+
+# Render OpenShift-compatible StatefulSet pattern
+helm template kagent . \
+  --set-string kagent.companyId=test-company \
+  --set-string kagent.provisioningToken=tok \
+  --set openshift.enabled=true
 ```
 
 ### Testing
