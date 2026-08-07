@@ -27,12 +27,6 @@ helm install kagent . \
 Alternatively, install directly from the GitHub repository without cloning:
 
 ```bash
-# Install with StatefulSet pattern
-helm install kagent oci://ghcr.io/kentik/kagent-helm \
-  --set-string kagent.companyId=YOUR_COMPANY_ID \
-  --set-string kagent.provisioningToken=YOUR_PROVISIONING_TOKEN
-
-# Or from a specific version/tag
 helm install kagent https://github.com/kentik/kagent-helm/archive/refs/heads/main.tar.gz \
   --set-string kagent.companyId=YOUR_COMPANY_ID \
   --set-string kagent.provisioningToken=YOUR_PROVISIONING_TOKEN
