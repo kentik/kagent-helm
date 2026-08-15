@@ -20,5 +20,32 @@ spec:
         {{- include "kagent.selectorLabels" . | nindent 8 }}
     spec:
       {{- include "kagent.podSpec" . | nindent 6 }}
+      volumes:
+      {{- if .Values.persistence.enabled }}
+      {{- if eq .Values.persistence.type "hostPath" }}
+      - name: data
+        hostPath:
+          path: {{ .Values.persistence.hostPath.path }}
+          type: {{ .Values.persistence.hostPath.type | default "DirectoryOrCreate" }}
+      {{- else }}
+      - name: data
+        emptyDir: {}
+      {{- end }}
+      {{- else }}
+      - name: data
+        emptyDir: {}
+      {{- end }}
+      {{- /* Keypair volume configuration */ -}}
+      {{- if .Values.persistence.keypair.enabled }}
+      {{- if eq .Values.persistence.keypair.type "hostPath" }}
+      - name: keys
+        hostPath:
+          path: {{ .Values.persistence.keypair.hostPath.path }}
+          type: {{ .Values.persistence.keypair.hostPath.type | default "DirectoryOrCreate" }}
+      {{- else }}
+      - name: keys
+        emptyDir: {}
+      {{- end }}
+      {{- end }}
 {{- end }}
 
