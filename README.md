@@ -170,10 +170,10 @@ kubectl get pods -l app.kubernetes.io/name=kagent -o wide
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `resources.requests.cpu` | CPU request | `100m` (50m for DaemonSet) |
-| `resources.requests.memory` | Memory request | `128Mi` (64Mi for DaemonSet) |
-| `resources.limits.cpu` | CPU limit | `500m` (200m for DaemonSet) |
-| `resources.limits.memory` | Memory limit | `512Mi` (256Mi for DaemonSet) |
+| `resources.requests.cpu` | CPU request | `1` |
+| `resources.requests.memory` | Memory request | `1024Mi` |
+| `resources.limits.cpu` | CPU limit | `2` |
+| `resources.limits.memory` | Memory limit | `4096Mi` |
 
 ### Security
 
